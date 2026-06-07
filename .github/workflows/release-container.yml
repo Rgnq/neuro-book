@@ -37,7 +37,7 @@ jobs:
           images: ${{ env.RUNTIME_IMAGE_NAME }}
           tags: |
             type=raw,value=${{ github.event.release.tag_name }}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
           labels: |
             org.opencontainers.image.title=neuro-book-runtime
             org.opencontainers.image.description=NeuroBook Bun runtime with agent shell tools
@@ -61,7 +61,7 @@ jobs:
           images: ${{ env.APP_IMAGE_NAME }}
           tags: |
             type=raw,value=${{ github.event.release.tag_name }}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
           labels: |
             org.opencontainers.image.title=neuro-book
             org.opencontainers.image.description=NeuroBook prebuilt app image with source and Nitro runtime vendor

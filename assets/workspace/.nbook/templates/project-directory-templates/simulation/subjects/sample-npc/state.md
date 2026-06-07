@@ -2,7 +2,7 @@
 
 本文件记录示例 NPC 当前状态。它是可变运行状态，不是角色卡稳定设定。
 
-本文件由 GM 裁决后维护。actor 可以报告状态变化候选，但不自行决定真实世界状态；特殊实例状态应放入 `simulation/entities/`。
+本文件由 simulator leader 裁决后维护。actor 可以报告状态变化候选，但不自行决定真实世界状态；特殊实例状态应放入 `simulation/entities/`。
 
 ## 当前位置
 
@@ -24,7 +24,7 @@ inventory:
     subjectVisibleName: 看起来普通的示例物品
 ```
 
-`entity` 的真实状态只给 GM / simulator leader 使用，不代表该 NPC 已经知道它的完整真相。
+`entity` 的真实状态只给 simulator leader 使用，不代表该 NPC 已经知道它的完整真相。
 
 ## 身体与姿态
 

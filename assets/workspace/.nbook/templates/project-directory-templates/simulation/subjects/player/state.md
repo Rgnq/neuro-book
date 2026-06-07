@@ -2,12 +2,12 @@
 
 本文件记录玩家角色当前状态。它是可变运行状态，不是角色卡稳定设定。
 
-本文件由 GM 裁决后维护。actor 可以报告状态变化候选，但不自行决定真实世界状态；特殊实例状态应放入 `simulation/entities/`。
+本文件由 simulator leader 裁决后维护。actor 可以报告状态变化候选，但不自行决定真实世界状态；特殊实例状态应放入 `simulation/entities/`。
 
 ## 当前位置
 
 - 待填写。
-- 示例：先参考 `simulation/runs/current.md` 的当前场景，直到 GM 建立更具体位置。
+- 示例：先参考 `simulation/runs/current.md` 的当前场景，直到 simulator leader 建立更具体位置。
 
 ## 持有物品
 

@@ -73,7 +73,7 @@ export const DirectorOutputSchema = Type.Object({
 });
 
 /**
- * simulator.actor 的实例初始化参数。每轮 GM packet 通过 invoke_agent.message 传入。
+ * simulator.actor 的实例初始化参数。每轮 actor-facing message 通过 invoke_agent.message 传入。
  */
 export const SubjectSimulatorInputSchema = Type.Object({
     actorId: Type.String({description: "本局 subject simulator id，通常与 simulation/subjects/{id}/ 目录名对应。"}),

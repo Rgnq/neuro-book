@@ -51,7 +51,7 @@ Project 模板创建了默认 simulation 目录。
 
 ## Hidden Facts
 
-待填写。这里记录 GM / leader 知道但不能直接交给 actor 或 writer 的信息。
+待填写。这里记录 simulator leader 知道但不能直接交给 actor 或 writer 的信息。
 
 ## Causal Chains
 

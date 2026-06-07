@@ -33,6 +33,7 @@ const USER_VARIABLE_DEFINITION_ROOT = path.join(USER_NBOOK_ABSOLUTE_ROOT, "agent
 const USER_SYSTEM_ASSETS_SYNC_STATE_PATH = path.join(USER_NBOOK_ABSOLUTE_ROOT, ".system-assets-sync-state.json");
 const PROJECT_DIRECTORY_TEMPLATE_ROOT = path.join(SYSTEM_NBOOK_ROOT, "templates", "project-directory-templates");
 const USER_PROJECT_DIRECTORY_TEMPLATE_ROOT = path.join(USER_NBOOK_ABSOLUTE_ROOT, "templates", "project-directory-templates");
+const PROJECT_DIRECTORY_TEMPLATE_ASSET_PREFIX = "templates/project-directory-templates/";
 const DELETED_MANAGED_SYSTEM_ASSET_PATHS = new Set([
     "templates/project-directory-templates/lorebook/context/director.md",
     "templates/project-directory-templates/lorebook/context/generated/.gitkeep",
@@ -49,6 +50,7 @@ const DELETED_MANAGED_SYSTEM_ASSET_PATHS = new Set([
     "templates/project-directory-templates/simulation/config.yaml",
     "templates/project-directory-templates/simulation/simulator.md",
     "templates/project-directory-templates/simulation/writer.md",
+    "templates/project-directory-templates/PROJECT-STATUS.md",
     "templates/project-directory-templates/lorebook/rule/writing-style/index.md",
     "templates/project-directory-templates/lorebook/rule/creation-boundaries/index.md",
     "templates/project-directory-templates/lorebook/note/project-positioning/index.md",
@@ -56,7 +58,6 @@ const DELETED_MANAGED_SYSTEM_ASSET_PATHS = new Set([
     "templates/project-directory-templates/lorebook/note/theme/index.md",
     "templates/project-directory-templates/lorebook/note/initial-plot-seed/index.md",
 ]);
-const PROJECT_MANIFEST_FILE = "project.yaml";
 const LEGACY_WORKSPACE_MANIFEST_FILE = "workspace.yaml";
 const USER_ASSETS_DIFF_MAX_BYTES = 512 * 1024;
 
@@ -319,22 +320,16 @@ export async function copyNovelDirectoryTemplate(workspaceRoot: string): Promise
 }
 
 /**
- * 清理旧模板产物，避免用户覆盖层把 Project Workspace 又带回 workspace.yaml 心智。
+ * 清理旧模板产物，避免用户覆盖层把已废弃的默认文件重新带进新 Project。
  */
 async function normalizeNovelDirectoryTemplateArtifacts(templateRoot: string): Promise<void> {
     await fs.rm(path.join(templateRoot, LEGACY_WORKSPACE_MANIFEST_FILE), {force: true});
-    const statusPath = path.join(templateRoot, "PROJECT-STATUS.md");
-    try {
-        const content = await fs.readFile(statusPath, "utf-8");
-        const normalizedContent = content.replaceAll("`workspace.yaml`", `\`${PROJECT_MANIFEST_FILE}\``);
-        if (normalizedContent !== content) {
-            await fs.writeFile(statusPath, normalizedContent, "utf-8");
+    for (const assetPath of DELETED_MANAGED_SYSTEM_ASSET_PATHS) {
+        if (!assetPath.startsWith(PROJECT_DIRECTORY_TEMPLATE_ASSET_PREFIX)) {
+            continue;
         }
-    } catch (error) {
-        if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
-            return;
-        }
-        throw error;
+        const templateRelativePath = assetPath.slice(PROJECT_DIRECTORY_TEMPLATE_ASSET_PREFIX.length);
+        await fs.rm(path.join(templateRoot, templateRelativePath), {force: true});
     }
 }
 

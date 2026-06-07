@@ -11,7 +11,7 @@ tags:
 summary: ""
 refs: []
 retrieval:
-  enabled: true
+  enabled: false
   trigger: null
 governance:
   source: manual

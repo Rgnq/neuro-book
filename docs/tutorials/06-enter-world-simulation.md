@@ -66,7 +66,7 @@ simulation/
 
 第一版 RP 主要由三类 profile 协作：
 
-- `simulator.leader`：世界模拟主管，负责 GM / 旁白 / 世界裁决，并统一调度 actor。
+- `simulator.leader`：世界模拟主管，负责场景叙述、世界裁决和 actor 调度。
 - `simulator.actor`：角色扮演 agent，只看到自己应该知道的信息。
 - `rp.writer`：RP 文本渲染 agent，只把 simulator brief 写成用户可读 prose。
 

@@ -1508,7 +1508,7 @@ describe("workspace-files", () => {
             expect(result.copied).toBeGreaterThanOrEqual(paths.length);
             await expect(fs.readFile(paths[0]!, "utf-8")).resolves.toContain("profile");
             await expect(fs.readFile(paths[1]!, "utf-8")).resolves.toContain("chapter");
-            await expect(fs.readFile(paths[2]!, "utf-8")).resolves.toContain("Simulator Leader 运行上下文");
+            await expect(fs.readFile(paths[2]!, "utf-8")).resolves.toContain("Simulator Leader Project Context");
             await expect(fs.readFile(paths[3]!, "utf-8")).resolves.toContain("../scripts/profile.ts");
             await expect(fs.readFile(paths[4]!, "utf-8")).resolves.toContain("--path-separator=/");
             expect(syncState.assets).toEqual(expect.arrayContaining([
@@ -1709,15 +1709,7 @@ describe("workspace-files", () => {
         await expect(readWorkspaceTextFile(root, "AGENTS.md")).resolves.toContain("Project Agent Instructions");
         await expect(readWorkspaceTextFile(root, "AGENTS.md")).resolves.toContain("Directory Boundaries");
         await expect(readWorkspaceTextFile(root, "AGENTS.md")).resolves.not.toContain("初始化待办");
-        await expect(readWorkspaceTextFile(root, "PROJECT-STATUS.md")).resolves.toContain("## Current Focus");
-        await expect(readWorkspaceTextFile(root, "PROJECT-STATUS.md")).resolves.toContain("## TODO");
-        await expect(readWorkspaceTextFile(root, "PROJECT-STATUS.md")).resolves.toContain("## Pending Questions");
-        await expect(readWorkspaceTextFile(root, "PROJECT-STATUS.md")).resolves.not.toContain("## Risks");
-        await expect(readWorkspaceTextFile(root, "PROJECT-STATUS.md")).resolves.not.toContain("## Recent Updates");
-        await expect(readWorkspaceTextFile(root, "PROJECT-STATUS.md")).resolves.toContain("不维护 `tasks/` walkthrough");
-        await expect(readWorkspaceTextFile(root, "PROJECT-STATUS.md")).resolves.toContain("填写 `lorebook/note/project-profile/`");
-        await expect(readWorkspaceTextFile(root, "PROJECT-STATUS.md")).resolves.toContain("填写 `lorebook/note/story-concept/`");
-        await expect(readWorkspaceTextFile(root, "PROJECT-STATUS.md")).resolves.toContain("`.agent/plan/` 保存 Agent 计划");
+        await expect(fs.access(path.join(root, "PROJECT-STATUS.md"))).rejects.toMatchObject({code: "ENOENT"});
         await expect(readWorkspaceTextFile(root, ".nbook/icons.json")).resolves.toContain("\"lorebook\"");
         await expect(fs.access(path.join(root, ".agent/.gitkeep")).then(() => true)).resolves.toBe(true);
         await expect(fs.access(path.join(root, ".agent/plan/.gitkeep")).then(() => true)).resolves.toBe(true);
@@ -1731,14 +1723,22 @@ describe("workspace-files", () => {
         await expect(fs.access(path.join(root, "lorebook/system/.gitkeep")).then(() => true)).resolves.toBe(true);
         await expect(readWorkspaceTextFile(root, "lorebook/note/project-profile/index.md")).resolves.toContain("## 类型与基调");
         await expect(readWorkspaceTextFile(root, "lorebook/note/project-profile/index.md")).resolves.toContain("## 对外简介");
+        await expect(readWorkspaceTextFile(root, "lorebook/note/project-profile/index.md")).resolves.toContain("enabled: false");
         await expect(readWorkspaceTextFile(root, "lorebook/note/story-concept/index.md")).resolves.toContain("## 故事概述");
         await expect(readWorkspaceTextFile(root, "lorebook/note/story-concept/index.md")).resolves.toContain("长简介式作品介绍");
+        await expect(readWorkspaceTextFile(root, "lorebook/note/story-concept/index.md")).resolves.toContain("enabled: false");
         await expect(readWorkspaceTextFile(root, "lorebook/note/opening-seed/index.md")).resolves.toContain("## 初始处境");
+        await expect(readWorkspaceTextFile(root, "lorebook/note/opening-seed/index.md")).resolves.toContain("enabled: false");
         await expect(readWorkspaceTextFile(root, "lorebook/instruction/creation-boundaries/index.md")).resolves.toContain("## 使用方式");
+        await expect(readWorkspaceTextFile(root, "lorebook/instruction/creation-boundaries/index.md")).resolves.toContain("enabled: false");
         await expect(readWorkspaceTextFile(root, "lorebook/instruction/creation-boundaries/index.md")).resolves.not.toContain("inject:");
         await expect(fs.access(path.join(root, "lorebook/rule/writing-style/index.md"))).rejects.toMatchObject({code: "ENOENT"});
         await expect(readWorkspaceTextFile(root, "agent-context/writer/context.md")).resolves.toContain("Writer Context Notes");
         await expect(readWorkspaceTextFile(root, "agent-context/rp.writer/context.md")).resolves.toContain("RP Writer Context");
+        await expect(readWorkspaceTextFile(root, "agent-context/simulator.leader/context.md")).resolves.toContain("Simulator Leader Project Context");
+        await expect(readWorkspaceTextFile(root, "agent-context/simulator.leader/context.md")).resolves.toContain("不在这里复制");
+        await expect(readWorkspaceTextFile(root, "agent-context/simulator.leader/context.md")).resolves.not.toContain("actor_packets");
+        await expect(readWorkspaceTextFile(root, "agent-context/simulator.leader/context.md")).resolves.not.toContain("writer.md");
         await expect(readWorkspaceTextFile(root, "agent-context/writer/memory.md")).resolves.toContain("Writer Memory");
         await expect(readWorkspaceTextFile(root, "agent-context/writer/generated.md")).resolves.toContain("writer generated context");
         await expect(readWorkspaceTextFile(root, "manuscript/001-volume/001-chapter/index.md")).resolves.toContain("## 正文草稿");
@@ -1771,19 +1771,33 @@ describe("workspace-files", () => {
     });
 
     it("用户 assets 可以覆盖小说目录模板但不覆盖目标 workspace 既有文件", async () => {
-        const userTemplatePath = path.join(USER_ASSETS_WORKSPACE_ROOT, "templates", "project-directory-templates", "PROJECT-STATUS.md");
+        const userTemplatePath = path.join(USER_ASSETS_WORKSPACE_ROOT, "templates", "project-directory-templates", "lorebook", "note", "project-profile", "index.md");
         const backup = await backupOptionalFile(userTemplatePath);
         await fs.mkdir(path.dirname(userTemplatePath), {recursive: true});
-        await fs.writeFile(userTemplatePath, "# 用户覆盖状态模板\n", "utf-8");
+        await fs.writeFile(userTemplatePath, "# 用户覆盖作品定位模板\n", "utf-8");
 
         try {
             await copyNovelDirectoryTemplate(root);
-            await expect(readWorkspaceTextFile(root, "PROJECT-STATUS.md")).resolves.toBe("# 用户覆盖状态模板\n");
+            await expect(readWorkspaceTextFile(root, "lorebook/note/project-profile/index.md")).resolves.toBe("# 用户覆盖作品定位模板\n");
             await expect(fs.access(path.join(root, "workspace.yaml"))).rejects.toMatchObject({code: "ENOENT"});
 
-            await writeWorkspaceTextFile(root, "PROJECT-STATUS.md", "# 小说自己的状态\n");
+            await writeWorkspaceTextFile(root, "lorebook/note/project-profile/index.md", "# 小说自己的作品定位\n");
             await copyNovelDirectoryTemplate(root);
-            await expect(readWorkspaceTextFile(root, "PROJECT-STATUS.md")).resolves.toBe("# 小说自己的状态\n");
+            await expect(readWorkspaceTextFile(root, "lorebook/note/project-profile/index.md")).resolves.toBe("# 小说自己的作品定位\n");
+        } finally {
+            await restoreOptionalFile(userTemplatePath, backup);
+        }
+    });
+
+    it("小说目录模板会忽略用户 assets 中已废弃的默认模板文件", async () => {
+        const userTemplatePath = path.join(USER_ASSETS_WORKSPACE_ROOT, "templates", "project-directory-templates", "lorebook", "rule", "writing-style", "index.md");
+        const backup = await backupOptionalFile(userTemplatePath);
+        await fs.mkdir(path.dirname(userTemplatePath), {recursive: true});
+        await fs.writeFile(userTemplatePath, "# 旧文风模板\n", "utf-8");
+
+        try {
+            await copyNovelDirectoryTemplate(root);
+            await expect(fs.access(path.join(root, "lorebook/rule/writing-style/index.md"))).rejects.toMatchObject({code: "ENOENT"});
         } finally {
             await restoreOptionalFile(userTemplatePath, backup);
         }
@@ -1819,8 +1833,7 @@ describe("workspace-files", () => {
             await expect(fs.access(path.join(createdRoot, "workspace.yaml"))).rejects.toMatchObject({code: "ENOENT"});
             await expect(readWorkspaceTextFile(createdRoot, "AGENTS.md")).resolves.toContain("Project Agent Instructions");
             await expect(readWorkspaceTextFile(createdRoot, "AGENTS.md")).resolves.toContain("agent-context/{profile}/context.md");
-            await expect(readWorkspaceTextFile(createdRoot, "PROJECT-STATUS.md")).resolves.toContain("## Pending Questions");
-            await expect(readWorkspaceTextFile(createdRoot, "PROJECT-STATUS.md")).resolves.not.toContain("## Recent Updates");
+            await expect(fs.access(path.join(createdRoot, "PROJECT-STATUS.md"))).rejects.toMatchObject({code: "ENOENT"});
             await expect(readWorkspaceTextFile(createdRoot, "manuscript/001-volume/001-chapter/index.md")).resolves.toContain("示范章节");
         } finally {
             await removeDirectoryWithRetry(createdRoot);

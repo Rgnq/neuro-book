@@ -10,7 +10,7 @@ tags:
 summary: ""
 refs: []
 retrieval:
-  enabled: true
+  enabled: false
   trigger: null
 governance:
   source: manual
@@ -48,4 +48,4 @@ ext: {}
 
 ## 状态记录
 
-初始化阶段暂时不能定死、但会影响后续流程的问题，统一记录到 `PROJECT-STATUS.md` 的 Pending Questions。
+初始化阶段暂时不能定死、但会影响后续流程的问题，统一记录到 `.agent/plan/` 下的计划或临时 walkthrough。
