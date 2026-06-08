@@ -9,8 +9,9 @@ simulation/
 |-- subjects/
 |   `-- {subject-id}/
 |       |-- subject.md
-|       |-- events.md
-|       |-- knowledge.md
+|       |-- memory-seed.md
+|       |-- events.jsonl
+|       |-- memory.jsonl
 |       |-- mind.md
 |       `-- state.md
 |-- entities/
@@ -54,7 +55,7 @@ Current RP / simulation profile contract:
 | Profile | Role | Reads | Writes |
 | --- | --- | --- | --- |
 | `simulator.leader` | World simulator leader shared by writing mode and RP. It understands the task or user action, dispatches actor emulators, adjudicates the world, maintains state/entities, builds writer-safe brief and reports the result. | `AGENTS.md`, `agent-context/simulator.leader/context.md`, recent `simulation/runs/`, subject/entity state, Plot context and god-view lorebook / reference allowed by its context. | Approved subject `state.md`, `simulation/entities/`, necessary `simulation/runs/` and explicit simulation context changes. New subjects/entities should be reported before creation unless the current prompt explicitly grants automatic authority. |
-| `simulator.actor` | Single-subject simulator. It only uses actor-safe context injected by sidecar and the current actor-facing packet to output a character response. | Main run sees actor binding metadata, `<actor_sidecar_context>` and the current actor-facing packet. `actor.context-load` sidecar can read bound `subject.md`, `events.md`, `knowledge.md`, `mind.md`, `state.md` and related actor-safe lorebook context. | Main run does not write files; `actor.memory-save` sidecar may maintain `events.md`, `knowledge.md` and `mind.md`. |
+| `simulator.actor` | Single-subject simulator. It only uses actor-safe context injected by sidecar and the current actor-facing packet to output a character response. | Main run sees actor binding metadata, `<actor_sidecar_context>` and the current actor-facing packet. `actor.context-load` sidecar can read small bound files (`subject.md`, `mind.md`, `state.md`) and use subject RAG over `events.jsonl` / `memory.jsonl`. | Main run does not write files; `actor.memory-save` sidecar may append `events.jsonl`, curate `memory.jsonl`, and update `mind.md`. |
 | `rp.writer` | Tick prose renderer. It turns simulator leader writer brief into user-visible prose. | Bound `agent-context/rp.writer/context.md` and writer brief; only extra paths explicitly provided by simulator leader. | Normal assistant prose; writes files only when writer brief explicitly specifies an output path. |
 
 `simulator.leader` must not hand complete `simulation/`, `lorebook/` or `reference/` to actor / writer. It filters god-view context into actor-facing messages or writer briefs.
@@ -68,8 +69,8 @@ Current RP / simulation profile contract:
 | subject file | actor input |
 | --- | --- |
 | `subject.md` | `instructionPath` |
-| `events.md` | `eventsPath` |
-| `knowledge.md` | `knowledgePath` |
+| `events.jsonl` | `eventsPath` |
+| `memory.jsonl` | `memoryPath` |
 | `mind.md` | `mindPath` |
 | `state.md` | `statePath` |
 
@@ -82,8 +83,9 @@ Subject paths are Project Workspace relative, such as `simulation/subjects/erina
 ```text
 simulation/subjects/{subject-id}/
 |-- subject.md
-|-- events.md
-|-- knowledge.md
+|-- memory-seed.md
+|-- events.jsonl
+|-- memory.jsonl
 |-- mind.md
 `-- state.md
 ```
@@ -91,10 +93,23 @@ simulation/subjects/{subject-id}/
 | File | Purpose |
 | --- | --- |
 | `subject.md` | Subject simulation instruction, stable personality, voice and action principles. |
-| `events.md` | Important events personally experienced or learned by the subject. |
-| `knowledge.md` | What the subject knows, believes or misunderstands. |
+| `memory-seed.md` | Initialization memory seed. Convert it into first `events.jsonl` / `memory.jsonl` records when creating a subject; do not reread it as live memory each turn. |
+| `events.jsonl` | Append-only episodic memory. Each line is `{ tick?, time?, text }` and records what the subject experienced, observed, was told, thought, misunderstood or inferred at that time. |
+| `memory.jsonl` | Editable stable memory. Each line is `{ topic, aliases?, view }` and records the subject's current view or understanding of a person, place, object, concept, organization or self-related stable constraint. |
 | `mind.md` | Current short-term psychology, doubts, judgement, motivation and emotions. |
 | `state.md` | Current location, visible condition, inventory summary, relationship pressure and short-term goals. |
+
+## Subject RAG Memory
+
+`events.jsonl` and `memory.jsonl` are the only subject files indexed by the first Subject RAG implementation. `subject_rag_search` treats `{project}/.nbook/subject-rag.sqlite` as a rebuildable SQLite + sqlite-vec cache; the JSONL files remain the source of truth.
+
+The index is scoped by `subject_path` and `source_type`, so an actor can only recall the current subject's own episodic memories and stable views. It does not search lorebook, Project-wide files or other subjects.
+
+`actor.context-load` uses `subject_rag_search` for coarse recall, reranks and compresses candidates, then persists a small `<actor_sidecar_context>` into the actor session. `actor.memory-save` appends `events.jsonl` through `subject_event_append` and curates `memory.jsonl` through `memory_bio`.
+
+Embedding configuration is separate from Pi chat / vision model settings. Global Config owns the OpenAI-compatible embedding service; Project Config may only override embedding model and dimensions.
+
+See [subject-rag-memory.md](subject-rag-memory.md) for the stable tool, index and configuration contract.
 
 ## Entities
 

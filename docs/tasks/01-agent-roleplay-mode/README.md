@@ -4,6 +4,8 @@
 
 2026-06-07 update: 本任务里的早期 `leader.rp`、`simulation/simulator.md`、`simulation/writer.md`、`simulation/config.yaml`、`simulation/cast.yaml` 说法已经被 profile context V2 取代。当前合同是：所有 profile 先读 Project root `AGENTS.md`，再读自己的 `agent-context/{profile}/context.md` / `agent-context/{profile}/generated.md`；`simulator.leader` 读 `agent-context/simulator.leader/context.md`，`rp.writer` 读 `agent-context/rp.writer/context.md`；`simulation/` 只保留 `subjects/`、`entities/`、`runs/` runtime state。
 
+2026-06-08 update: subject memory 合同已 hard cut 到 `memory-seed.md`、`events.jsonl`、`memory.jsonl`、`mind.md`、`state.md`。下文早期出现的 `events.md` / `knowledge.md` 只表示历史设计记录；当前实现和模板以 Subject RAG Memory task 与 `reference/content/simulation.md` 为准。
+
 本任务当前实现目标已从独立 `roleplay/` 运行目录硬切为默认 Project 模板内的 `simulation/`：
 
 - 新 Project 默认使用 `assets/workspace/.nbook/templates/project-directory-templates`。
@@ -106,14 +108,16 @@ simulation/
 `-- subjects/
     |-- player/
     |   |-- subject.md
-    |   |-- events.md
-    |   |-- knowledge.md
+    |   |-- memory-seed.md
+    |   |-- events.jsonl
+    |   |-- memory.jsonl
     |   |-- mind.md
     |   `-- state.md
     `-- {subject-id}/
         |-- subject.md
-        |-- events.md
-        |-- knowledge.md
+        |-- memory-seed.md
+        |-- events.jsonl
+        |-- memory.jsonl
         |-- mind.md
         `-- state.md
 ```
@@ -160,8 +164,9 @@ agent-context/rp.writer/context.md
 simulation/entities/{entity-id}/entity.md
 simulation/entities/{entity-id}/state.md
 simulation/subjects/{actor-id}/subject.md
-simulation/subjects/{actor-id}/events.md
-simulation/subjects/{actor-id}/knowledge.md
+simulation/subjects/{actor-id}/memory-seed.md
+simulation/subjects/{actor-id}/events.jsonl
+simulation/subjects/{actor-id}/memory.jsonl
 simulation/subjects/{actor-id}/mind.md
 simulation/subjects/{actor-id}/state.md
 ```
@@ -227,7 +232,7 @@ reporter       # overview.md / inspect.json / unpack-report.md / import-report.m
 
 - 变量系统暂不实现。第一阶段先把纯文本卡导入做好；复杂数值、好感度、背包、任务进度、状态栏等后续专门设计。
 - 泛用自然语言编辑工具先记录为 TODO。该工具不是 state 专用，参数方向暂定为：目标文件、自然语言操作说明、可选携带上下文消息数量，后续可接轻量模型。
-- `SidecarProfilePass` 已在 Harness 层实现 V1，详见 `docs/tasks/23-agent-sidecar-profile-pass/README.md`。`simulator.actor` 已接入 `actor.context-load` / `actor.memory-save` 两个旁路：主 run 前检索并注入 actor-safe 设定，主 run 后维护 `events.md`、`knowledge.md` 与 `mind.md`；`state.md` 与 `simulation/entities/` 由 GM 裁决后写入。`rp.writer` 暂未接入 sidecar，仍由 GM 注入可写 lorebook 摘要。
+- `SidecarProfilePass` 已在 Harness 层实现 V1，详见 `docs/tasks/23-agent-sidecar-profile-pass/README.md`。`simulator.actor` 已接入 `actor.context-load` / `actor.memory-save` 两个旁路：主 run 前检索并注入 actor-safe 设定，主 run 后维护 `events.jsonl`、`memory.jsonl` 与 `mind.md`；`state.md` 与 `simulation/entities/` 由 GM 裁决后写入。`rp.writer` 暂未接入 sidecar，仍由 GM 注入可写 lorebook 摘要。
 - 已新增第一版 RP builtin profiles：
   - `leader.rp`：用户进入 RP 模式后的 GM 主控 profile，读取 `simulation/` 运行目录，初始化/复用 `simulator.actor` 和 `rp.writer`，按 Tick 协议进行信息过滤、actor 调度、世界裁决、subject state / entity state 写入和 writer brief 构造；GM 直接面向用户叙述，开局负责说明玩家已知信息、当前处境和必要背景。
   - `simulator.actor`：通用角色扮演 profile，创建 input 绑定 `subject.md`、`events.md`、`knowledge.md`、`mind.md` 与 `state.md`，运行时自动注入这些文件；每轮只根据 GM packet 返回结构化 actor response packet。
@@ -249,8 +254,8 @@ reporter       # overview.md / inspect.json / unpack-report.md / import-report.m
   - `rp.writer` 强化“正文代笔，不是 GM”，不输出标题、摘要、选项或解释，不替玩家角色补未输入的内心和关键动作。
   - roleplay 模板同步了 GM / writer / actor 的上述提示词边界。
 - Information Control Protocol 落地：
-  - `simulator.actor` 合同新增 `eventsPath` 输入与 `event_update` 输出，actor 主 run 自动注入 `events.md`。
-  - `actor.memory-save` 旁路现在维护 `events.md`、`knowledge.md` 与 `mind.md`，仍不修改 `state.md`。
+  - `simulator.actor` 合同已切到 JSONL subject memory；context-load sidecar 读取 `events.jsonl` / `memory.jsonl` 并注入 actor-safe 摘要。
+  - `actor.memory-save` 旁路现在维护 `events.jsonl`、`memory.jsonl` 与 `mind.md`，仍不修改 `state.md`。
   - `leader.rp` 负责 GM 裁决后的 subject `state.md` 与 `simulation/entities/` 写入；actor 的 `state_update` 只是候选。
   - 默认 Project 模板新增 `simulation/entities/example-item/`，用于说明普通物品不实例化、特殊有状态实例才进入 entities。
 

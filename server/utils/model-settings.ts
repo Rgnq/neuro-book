@@ -38,6 +38,8 @@ type ResolvedContextWindow = {
     tokens: number | null;
     source: "manual" | "unknown";
 };
+type PiModelInput = Model<any>["input"][number];
+type ConfigModelInput = "text" | "image";
 
 type OpenAIModelsResponse = {
     data?: Array<{
@@ -466,7 +468,7 @@ function resolvePiModelForDraft(providerDraft: ModelProviderDraftDto, modelDraft
             provider: piProviderId,
             baseUrl: providerDraft.options.baseURL || modelDraft.baseUrl || "",
             reasoning: modelDraft.reasoning ?? false,
-            input: [...(modelDraft.input ?? ["text"])],
+            input: normalizePiModelInput(modelDraft.input),
             cost: modelDraft.cost ?? {
                 input: 0,
                 output: 0,
@@ -483,7 +485,7 @@ function resolvePiModelForDraft(providerDraft: ModelProviderDraftDto, modelDraft
         provider: piProviderId,
         baseUrl: providerDraft.options.baseURL || modelDraft.baseUrl || piModel?.baseUrl || "",
         reasoning: modelDraft.reasoning ?? piModel?.reasoning ?? false,
-        input: [...(modelDraft.input ?? piModel?.input ?? ["text"])],
+        input: normalizePiModelInput(modelDraft.input ?? piModel?.input ?? ["text"]),
         cost: {
             input: modelDraft.cost?.input ?? piModel?.cost.input ?? 0,
             output: modelDraft.cost?.output ?? piModel?.cost.output ?? 0,
@@ -556,6 +558,11 @@ function isJsonValue(value: unknown): value is JsonValue {
         return Object.values(value).every(isJsonValue);
     }
     return false;
+}
+
+function normalizePiModelInput(input: ConfigModelInput[] | PiModelInput[] | null | undefined): PiModelInput[] {
+    const values = [...new Set((input ?? ["text"]).filter((item): item is PiModelInput => item === "text" || item === "image"))];
+    return values.length > 0 ? values : ["text"];
 }
 
 function resolvePiProviderModels(providerId: string): Model<any>[] {

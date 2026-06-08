@@ -1,0 +1,81 @@
+/** @jsxImportSource nbook/server/agent/profiles/profile-dsl */
+/** @jsxRuntime automatic */
+import {type Static} from "typebox";
+import {defineAgentProfile} from "nbook/server/agent/profiles/define-agent-profile";
+import {MemoryCuratorInputSchema, MemoryCuratorOutputSchema} from "nbook/server/agent/profiles/builtin-contracts";
+import {Message, ModelContext, ProfilePrompt, System} from "nbook/server/agent/profiles/profile-dsl";
+import {profileText} from "nbook/server/agent/profiles/profile-text";
+
+export const profileManifest = {
+    key: "memory.curator",
+    name: "Memory Curator",
+    description: "通用记忆整理器：根据 facts 和当前 memory 集合产出 JSON Patch，由工具层校验并写回。",
+} as const;
+
+export const InputSchema = MemoryCuratorInputSchema;
+export const OutputSchema = MemoryCuratorOutputSchema;
+
+export type Input = Static<typeof InputSchema>;
+export type Output = Static<typeof OutputSchema>;
+
+export default defineAgentProfile({
+    manifest: profileManifest,
+    inputSchema: InputSchema,
+    outputSchema: OutputSchema,
+    allowedToolKeys: ["report_result"],
+    compaction: {},
+    context(ctx) {
+        return (
+            <ProfilePrompt>
+                <System>{renderSystemPrompt()}</System>
+                <ModelContext>
+                    <Message>{renderInput(ctx.input)}</Message>
+                </ModelContext>
+            </ProfilePrompt>
+        );
+    },
+});
+
+function renderSystemPrompt(): string {
+    return profileText`
+        你是 memory.curator。你不扮演角色，不写正文，只维护一个 subject 的当前稳定认知集合。
+
+        输入包含：
+        - subjectPath
+        - facts：本轮新增的 subject-facing facts
+        - currentMemories：当前 memory.jsonl 解析后的 SubjectMemory[]
+
+        SubjectMemory schema:
+        - topic: string
+        - aliases?: string[]
+        - view: string
+
+        判断规则：
+        - memory.jsonl 记录“角色对某个主体的当前看法、理解、态度、关系判断、误解或修正”。
+        - 短期情绪、临时打算和刚发生的一次性事件，不应独立创建 topic；它们通常属于 events.jsonl 或 mind.md。
+        - 与某人的关系应合并进这个人的 topic，不要创建“与某人的关系”这种 topic。
+        - 如果 facts 只补充经历，不改变稳定看法，patch 返回空数组。
+        - 如果角色完成“粉色头发的女孩子 = 艾琳娜”这类认知合并，应合并 topic，并把旧称保留到 aliases。
+        - 不写 subject 不知道的隐藏真相，不把外部裁决当成角色已知事实。
+
+        输出要求：
+        - 必须调用 report_result。
+        - report_result.data 必须符合 MemoryCuratorOutputSchema。
+        - patch 是应用到 currentMemories 这个数组上的 JSON Patch。
+        - patch 后结果必须仍是 SubjectMemory[]，topic/view 非空，topic 不重复。
+    `;
+}
+
+function renderInput(input: Input): string {
+    return profileText`
+        <memory_curator_input>
+        subjectPath: ${input.subjectPath}
+
+        facts:
+        ${input.facts}
+
+        currentMemories:
+        ${JSON.stringify(input.currentMemories, null, 2)}
+        </memory_curator_input>
+    `;
+}

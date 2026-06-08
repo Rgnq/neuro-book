@@ -53,7 +53,7 @@ describe("RP builtin profiles", () => {
         expect(SubjectSimulatorInputSchema.properties).toHaveProperty("actorId");
         expect(SubjectSimulatorInputSchema.properties).toHaveProperty("instructionPath");
         expect(SubjectSimulatorInputSchema.properties).toHaveProperty("eventsPath");
-        expect(SubjectSimulatorInputSchema.properties).toHaveProperty("knowledgePath");
+        expect(SubjectSimulatorInputSchema.properties).toHaveProperty("memoryPath");
         expect(SubjectSimulatorInputSchema.properties).toHaveProperty("mindPath");
         expect(SubjectSimulatorInputSchema.properties).toHaveProperty("statePath");
         expect(SubjectSimulatorOutputSchema.properties).toHaveProperty("visible_response");
@@ -126,8 +126,8 @@ describe("RP builtin profiles", () => {
                     actorName: "绘璃奈",
                     kind: "npc",
                     instructionPath: `${fixture.projectSlug}/simulation/subjects/heroine/subject.md`,
-                    eventsPath: `${fixture.projectSlug}/simulation/subjects/heroine/events.md`,
-                    knowledgePath: `${fixture.projectSlug}/simulation/subjects/heroine/knowledge.md`,
+                    eventsPath: `${fixture.projectSlug}/simulation/subjects/heroine/events.jsonl`,
+                    memoryPath: `${fixture.projectSlug}/simulation/subjects/heroine/memory.jsonl`,
                     mindPath: `${fixture.projectSlug}/simulation/subjects/heroine/mind.md`,
                     statePath: `${fixture.projectSlug}/simulation/subjects/heroine/state.md`,
                 },
@@ -142,22 +142,22 @@ describe("RP builtin profiles", () => {
             const contextLoad = sidecars.find((sidecar) => sidecar.name === "actor.context-load");
             const memorySave = sidecars.find((sidecar) => sidecar.name === "actor.memory-save");
 
-            expect(simulatorActorProfile.allowedToolKeys).toEqual(["read", "write", "edit", "report_result"]);
+            expect(simulatorActorProfile.allowedToolKeys).toEqual(["subject_rag_search", "subject_event_append", "memory_bio", "read", "edit", "report_result"]);
             expect(sidecars.map((sidecar) => sidecar.name)).toEqual(["actor.context-load", "actor.memory-save"]);
             expect(contextLoad).toEqual(expect.objectContaining({
                 stage: "prepareRun",
-                allowedToolKeys: ["read", "report_result"],
+                allowedToolKeys: ["subject_rag_search", "read", "report_result"],
             }));
             expect(memorySave).toEqual(expect.objectContaining({
                 stage: "settleRun",
-                allowedToolKeys: ["read", "write", "edit", "report_result"],
+                allowedToolKeys: ["subject_event_append", "memory_bio", "read", "edit", "report_result"],
             }));
             expect((contextLoad?.sidecarDataSchema as SchemaWithProperties | undefined)?.properties).toHaveProperty("actor_safe_context");
             expect((contextLoad?.sidecarDataSchema as SchemaWithProperties | undefined)?.properties).toHaveProperty("sources");
             expect((contextLoad?.sidecarDataSchema as SchemaWithProperties | undefined)?.properties).toHaveProperty("withheld");
             expect((memorySave?.sidecarDataSchema as SchemaWithProperties | undefined)?.properties).toHaveProperty("changed_files");
             expect((memorySave?.sidecarDataSchema as SchemaWithProperties | undefined)?.properties).toHaveProperty("events_summary");
-            expect((memorySave?.sidecarDataSchema as SchemaWithProperties | undefined)?.properties).toHaveProperty("knowledge_summary");
+            expect((memorySave?.sidecarDataSchema as SchemaWithProperties | undefined)?.properties).toHaveProperty("memory_summary");
             expect((memorySave?.sidecarDataSchema as SchemaWithProperties | undefined)?.properties).toHaveProperty("mind_summary");
             const memorySavePrompt = typeof memorySave?.enterPrompt === "function"
                 ? memorySave.enterPrompt({
@@ -173,8 +173,8 @@ describe("RP builtin profiles", () => {
                         actorName: "绘璃奈",
                         kind: "npc",
                         instructionPath: `${fixture.projectSlug}/simulation/subjects/heroine/subject.md`,
-                        eventsPath: `${fixture.projectSlug}/simulation/subjects/heroine/events.md`,
-                        knowledgePath: `${fixture.projectSlug}/simulation/subjects/heroine/knowledge.md`,
+                        eventsPath: `${fixture.projectSlug}/simulation/subjects/heroine/events.jsonl`,
+                        memoryPath: `${fixture.projectSlug}/simulation/subjects/heroine/memory.jsonl`,
                         mindPath: `${fixture.projectSlug}/simulation/subjects/heroine/mind.md`,
                         statePath: `${fixture.projectSlug}/simulation/subjects/heroine/state.md`,
                     },
@@ -212,7 +212,7 @@ describe("RP builtin profiles", () => {
             expect(systemPrompt).not.toContain("questions");
             expect(systemPrompt).toContain("如果你扮演的是玩家 actor");
             expect(systemPrompt).toContain("主扮演阶段不要调用 read、write 或 edit");
-            expect(systemPrompt).toContain("你看不到 subject.md、events.md、knowledge.md、mind.md、state.md 原文");
+            expect(systemPrompt).toContain("你看不到 subject.md、events.jsonl、memory.jsonl、mind.md、state.md 原文");
             expect(systemPrompt).toContain("文件维护由 actor.context-load / actor.memory-save 旁路处理");
             expect(systemPrompt).toContain("visible_response");
             expect(systemPrompt).toContain("我只表达角色反应本身");
@@ -230,7 +230,7 @@ describe("RP builtin profiles", () => {
             expect(modelContextText).not.toContain("她相信主角值得观察");
             expect(modelContextText).not.toContain("她正在判断主角的用意");
             expect(modelContextText).not.toContain("她位于学院区广场边缘");
-            expect(modelContextText).toContain("knowledgePath");
+            expect(modelContextText).toContain("memoryPath");
             expect(modelContextText).toContain("eventsPath");
             expect(modelContextText).toContain("mindPath");
             expect(modelContextText).toContain("statePath");
@@ -263,8 +263,8 @@ describe("RP builtin profiles", () => {
                     actorName: "绘璃奈",
                     kind: "npc",
                     instructionPath: `${fixture.projectSlug}/simulation/subjects/heroine/subject.md`,
-                    eventsPath: `${fixture.projectSlug}/simulation/subjects/heroine/events.md`,
-                    knowledgePath: `${fixture.projectSlug}/simulation/subjects/heroine/knowledge.md`,
+                    eventsPath: `${fixture.projectSlug}/simulation/subjects/heroine/events.jsonl`,
+                    memoryPath: `${fixture.projectSlug}/simulation/subjects/heroine/memory.jsonl`,
                     mindPath: `${fixture.projectSlug}/simulation/subjects/heroine/mind.md`,
                     statePath: `${fixture.projectSlug}/simulation/subjects/heroine/state.md`,
                 },
@@ -277,11 +277,11 @@ describe("RP builtin profiles", () => {
 
             expect(simulatorActorProfile.inputSchema).toBe(SubjectSimulatorInputSchema);
             expect(simulatorActorProfile.outputSchema).toBe(SubjectSimulatorOutputSchema);
-            expect(simulatorActorProfile.allowedToolKeys).toEqual(["read", "write", "edit", "report_result"]);
+            expect(simulatorActorProfile.allowedToolKeys).toEqual(["subject_rag_search", "subject_event_append", "memory_bio", "read", "edit", "report_result"]);
             expect(systemPrompt).toContain("<profile>simulator.actor</profile>");
             expect(systemPrompt).toContain("<actor id=\"heroine\" kind=\"npc\">绘璃奈</actor>");
             expect(modelContextText).toContain("<actor_binding>");
-            expect(modelContextText).toContain("knowledgePath");
+            expect(modelContextText).toContain("memoryPath");
         } finally {
             await rm(fixture.workspaceRoot, {recursive: true, force: true});
         }
@@ -348,8 +348,12 @@ describe("RP builtin profiles", () => {
         expect(playerSubject).toContain("controlledBy: user");
         expect(npcSubject).toContain("id: sample-npc");
         expect(npcSubject).toContain("controlledBy: simulator");
-        await expect(readFile(join(templateRoot, "subjects", "player", "events.md"), "utf-8")).resolves.toMatch(/事件流水|经历/);
-        await expect(readFile(join(templateRoot, "subjects", "sample-npc", "events.md"), "utf-8")).resolves.toMatch(/事件流水|经历/);
+        await expect(readFile(join(templateRoot, "subjects", "player", "events.jsonl"), "utf-8")).resolves.toMatch(/起始场景/);
+        await expect(readFile(join(templateRoot, "subjects", "player", "memory.jsonl"), "utf-8")).resolves.toMatch(/示例 NPC/);
+        await expect(readFile(join(templateRoot, "subjects", "sample-npc", "events.jsonl"), "utf-8")).resolves.toMatch(/起始场景/);
+        await expect(readFile(join(templateRoot, "subjects", "sample-npc", "memory.jsonl"), "utf-8")).resolves.toMatch(/玩家角色/);
+        await expect(readFile(join(templateRoot, "subjects", "player", "events.md"), "utf-8")).rejects.toThrow();
+        await expect(readFile(join(templateRoot, "subjects", "player", "knowledge.md"), "utf-8")).rejects.toThrow();
 
         const entityText = await readFile(join(templateRoot, "entities", "example-item", "entity.md"), "utf-8");
         await expect(readFile(join(templateRoot, "entities", "example-item", "state.md"), "utf-8")).resolves.toContain("subjectVisibleName");
@@ -377,8 +381,8 @@ async function createRoleplayFixture(): Promise<{workspaceRoot: string; projectS
     const actorRoot = join(workspaceRoot, projectSlug, "simulation", "subjects", "heroine");
     await mkdir(actorRoot, {recursive: true});
     await writeFile(join(actorRoot, "subject.md"), "保持礼貌但警惕，遇到未知物品会先询问来源。", "utf-8");
-    await writeFile(join(actorRoot, "events.md"), "她第一次在广场边缘见到主角，还没有确认对方目的。", "utf-8");
-    await writeFile(join(actorRoot, "knowledge.md"), "她相信主角值得观察，但还不知道世界之心的真名。", "utf-8");
+    await writeFile(join(actorRoot, "events.jsonl"), "{\"text\":\"她第一次在广场边缘见到主角，还没有确认对方目的。\"}\n", "utf-8");
+    await writeFile(join(actorRoot, "memory.jsonl"), "{\"topic\":\"主角\",\"view\":\"她相信主角值得观察，但还不知道世界之心的真名。\"}\n", "utf-8");
     await writeFile(join(actorRoot, "mind.md"), "她正在判断主角的用意，暂时不想显露紧张。", "utf-8");
     await writeFile(join(actorRoot, "state.md"), "她位于学院区广场边缘，双手空着，状态正常。", "utf-8");
     await mkdir(join(workspaceRoot, projectSlug, "agent-context", "rp.writer"), {recursive: true});

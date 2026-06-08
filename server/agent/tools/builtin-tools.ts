@@ -6,6 +6,7 @@ import type {NeuroAgentTool} from "nbook/server/agent/tools/types";
 import {createFileTools} from "nbook/server/agent/tools/file-tools";
 import {createPlotTools} from "nbook/server/agent/tools/plot-tools";
 import {createSqlTool} from "nbook/server/agent/tools/sql-tool";
+import {createSubjectMemoryTools} from "nbook/server/agent/tools/subject-memory-tools";
 import {createTaskTools} from "nbook/server/agent/tools/task-tools";
 import {createWebTools} from "nbook/server/agent/tools/web-tools";
 import {renderSchemaSummary} from "nbook/server/agent/profiles/profile-dsl";
@@ -105,6 +106,7 @@ export function createBuiltinTools(harness: NeuroAgentHarness): NeuroAgentTool[]
         ...createPlotTools(),
         ...createVariableTools(),
         ...createWebTools(),
+        ...createSubjectMemoryTools(),
         createSqlTool(),
         {
             key: "report_result",

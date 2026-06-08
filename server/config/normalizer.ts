@@ -12,6 +12,8 @@ import type {
     EffectiveConfig,
     ModelProviderOptionsConfig,
     ModelSettingsConfig,
+    EmbeddingModelConfig,
+    EmbeddingServiceConfig,
     StoredGlobalConfig,
     StoredAgentProfileConfig,
     StoredProjectConfig,
@@ -31,6 +33,16 @@ const DEFAULT_AGENT_PROFILE_MODEL_DEFAULTS: AgentProfileModelConfig = {
     topK: null,
     reasoningEffort: "off",
     stream: true,
+};
+const DEFAULT_EMBEDDING_SERVICE: EmbeddingServiceConfig = {
+    enabled: false,
+    provider: "openai-compatible",
+    model: null,
+    dimensions: null,
+    apiKey: "",
+    baseURL: "",
+    timeoutMs: null,
+    requestOptions: {},
 };
 const DEFAULT_WEB_SETTINGS: WebSettingsConfig = {
     search: {
@@ -78,6 +90,7 @@ export function createDefaultEffectiveConfig(): EffectiveConfig {
             defaultModelKey: null,
             providers: {},
         },
+        embedding: {...DEFAULT_EMBEDDING_SERVICE},
         agent: {
             defaultProfileKey: {
                 novel: null,
@@ -112,6 +125,7 @@ export function normalizeGlobalConfig(input: Partial<StoredGlobalConfig> | null 
             default: normalizeNullableModelKey(raw.models?.default),
             providers: normalizeStoredProviders(raw.models?.providers),
         },
+        embedding: normalizeStoredEmbeddingService(raw.embedding, readLegacyEmbedding(raw.models)),
         agent: {
             defaultProfileKey: {
                 novel: normalizeNullableModelKey(raw.agent?.defaultProfileKey?.novel),
@@ -144,6 +158,11 @@ export function normalizeProjectConfig(input: Partial<StoredProjectConfig> | nul
                 default: normalizeNullableModelKey(raw.models.default),
             },
         } : {}),
+        ...(raw.embedding ? {
+            embedding: normalizeEmbeddingModelConfig(raw.embedding),
+        } : readLegacyEmbedding(raw.models) ? {
+            embedding: normalizeEmbeddingModelConfig(readLegacyEmbedding(raw.models)),
+        } : {}),
         ...(raw.agent ? {
             agent: {
                 defaultProfileKey: normalizeNullableModelKey(raw.agent.defaultProfileKey),
@@ -169,6 +188,7 @@ export function resolveEffectiveConfig(globalConfig: StoredGlobalConfig, project
 
     effective.auth.enabled = globalConfig.auth?.enabled ?? effective.auth.enabled;
     effective.models = normalizeModelSettings(globalConfig.models);
+    effective.embedding = normalizeEmbeddingService(globalConfig.embedding, readLegacyEmbedding(globalConfig.models));
     effective.agent.defaultProfileKey = {
         novel: normalizeNullableModelKey(globalConfig.agent?.defaultProfileKey?.novel),
         userAssets: normalizeNullableModelKey(globalConfig.agent?.defaultProfileKey?.userAssets),
@@ -187,6 +207,15 @@ export function resolveEffectiveConfig(globalConfig: StoredGlobalConfig, project
 
     if (projectConfig.models && Object.hasOwn(projectConfig.models, "default") && projectConfig.models.default !== null) {
         effective.models.defaultModelKey = normalizeNullableModelKey(projectConfig.models.default);
+    }
+    if (projectConfig.embedding) {
+        const embedding = normalizeEmbeddingModelConfig(projectConfig.embedding);
+        if (embedding.model !== null) {
+            effective.embedding.model = embedding.model;
+        }
+        if (embedding.dimensions !== null) {
+            effective.embedding.dimensions = embedding.dimensions;
+        }
     }
     if (projectConfig.agent && Object.hasOwn(projectConfig.agent, "defaultProfileKey") && projectConfig.agent.defaultProfileKey !== null) {
         effective.agent.defaultProfileKey.novel = normalizeNullableModelKey(projectConfig.agent.defaultProfileKey);
@@ -460,12 +489,64 @@ function normalizeNullableJsonRecord(input: unknown): Record<string, JsonValue> 
     return Object.keys(record).length > 0 ? record : null;
 }
 
-function normalizeModelInput(input: unknown): ("text" | "image")[] | null {
+function normalizeModelInput(input: unknown): ConfiguredModelConfig["input"] {
     if (!Array.isArray(input)) {
         return null;
     }
-    const values = [...new Set(input.filter((item): item is "text" | "image" => item === "text" || item === "image"))];
+    const values = [...new Set(input.filter((item): item is NonNullable<ConfiguredModelConfig["input"]>[number] => item === "text" || item === "image"))];
     return values.length > 0 ? values : null;
+}
+
+export function normalizeEmbeddingService(
+    input: Partial<EmbeddingServiceConfig> | undefined,
+    legacyInput?: unknown,
+): EmbeddingServiceConfig {
+    const legacy = normalizeEmbeddingModelConfig(legacyInput);
+    const record = input && typeof input === "object" && !Array.isArray(input)
+        ? input as Record<string, unknown>
+        : {};
+    const model = normalizeNullableText(record.model) ?? legacy.model;
+    const dimensions = normalizeNullablePositiveInteger(record.dimensions) ?? legacy.dimensions;
+    return {
+        enabled: typeof record.enabled === "boolean" ? record.enabled : Boolean(model && dimensions),
+        provider: record.provider === "openai-compatible" ? "openai-compatible" : DEFAULT_EMBEDDING_SERVICE.provider,
+        model,
+        dimensions,
+        apiKey: normalizeText(record.apiKey),
+        baseURL: normalizeText(record.baseURL),
+        timeoutMs: normalizeNullablePositiveInteger(record.timeoutMs),
+        requestOptions: normalizeJsonRecord(record.requestOptions),
+    };
+}
+
+export function normalizeEmbeddingModelConfig(input: unknown): EmbeddingModelConfig {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+        return {model: null, dimensions: null};
+    }
+    const record = input as Record<string, unknown>;
+    const legacyModelKey = normalizeNullableModelKey(record.modelKey);
+    const legacyModel = legacyModelKey?.includes("/")
+        ? legacyModelKey.slice(legacyModelKey.indexOf("/") + 1)
+        : legacyModelKey;
+    return {
+        model: normalizeNullableText(record.model) ?? legacyModel,
+        dimensions: normalizeNullablePositiveInteger(record.dimensions),
+    };
+}
+
+function normalizeStoredEmbeddingService(
+    input: Partial<EmbeddingServiceConfig> | undefined,
+    legacyInput?: unknown,
+): EmbeddingServiceConfig {
+    return normalizeEmbeddingService(input, legacyInput);
+}
+
+function readLegacyEmbedding(models: StoredGlobalConfig["models"] | StoredProjectConfig["models"] | undefined): unknown {
+    if (!models || typeof models !== "object" || Array.isArray(models)) {
+        return undefined;
+    }
+    const record = models as Record<string, unknown>;
+    return record.embedding;
 }
 
 /**

@@ -6,6 +6,7 @@ import FormSelect from "nbook/app/components/common/form/FormSelect.vue";
 import NovelIdeAgentProfileDefaultSettingsPanel from "nbook/app/components/novel-ide/settings/NovelIdeAgentProfileDefaultSettingsPanel.vue";
 import NovelIdeAgentProfileModelSettingsPanel from "nbook/app/components/novel-ide/settings/NovelIdeAgentProfileModelSettingsPanel.vue";
 import NovelIdeCostSettingsPanel from "nbook/app/components/novel-ide/settings/NovelIdeCostSettingsPanel.vue";
+import NovelIdeEmbeddingSettingsPanel from "nbook/app/components/novel-ide/settings/NovelIdeEmbeddingSettingsPanel.vue";
 import NovelIdeModelSettingsPanel from "nbook/app/components/novel-ide/settings/NovelIdeModelSettingsPanel.vue";
 import NovelIdeWebSettingsPanel from "nbook/app/components/novel-ide/settings/NovelIdeWebSettingsPanel.vue";
 import {useNovelIdeStore} from "nbook/app/stores/novel-ide";
@@ -13,7 +14,7 @@ import type {IdeTheme} from "nbook/app/utils/theme/theme-tokens";
 import type {MarkdownStudioViewMode} from "nbook/app/composables/useMarkdownStudioController";
 import {DEFAULT_MARKDOWN_EDITOR_PREFERENCES, DEFAULT_MONACO_EDITOR_PREFERENCES, type MarkdownEditorPreferences, type MonacoEditorPreferences} from "nbook/shared/editor-workbench";
 
-type SettingsSection = "frontend" | "editor" | "models" | "cost" | "web-tools" | "agent-profile-defaults" | "agent-profile-models";
+type SettingsSection = "frontend" | "editor" | "models" | "embedding" | "cost" | "web-tools" | "agent-profile-defaults" | "agent-profile-models";
 type SettingsScope = "global" | "project" | "browser";
 type AppVersionKind = "release" | "tag" | "commit" | "package";
 
@@ -67,6 +68,12 @@ const frontendSectionItems: Array<{value: SettingsSection; label: string; descri
         iconClass: "i-lucide-cpu",
     },
     {
+        value: "embedding",
+        label: "Embedding",
+        description: "配置 RAG 使用的嵌入服务。",
+        iconClass: "i-lucide-binary",
+    },
+    {
         value: "cost",
         label: "费用显示",
         description: "设置 Agent 费用展示币种和汇率。",
@@ -113,8 +120,8 @@ const scopeOptions: Array<{value: SettingsScope; label: string; description: str
     },
 ];
 
-const globalConfigSections: SettingsSection[] = ["models", "cost", "web-tools", "agent-profile-defaults", "agent-profile-models"];
-const projectConfigSections: SettingsSection[] = ["models", "web-tools", "agent-profile-defaults", "agent-profile-models"];
+const globalConfigSections: SettingsSection[] = ["models", "embedding", "cost", "web-tools", "agent-profile-defaults", "agent-profile-models"];
+const projectConfigSections: SettingsSection[] = ["models", "embedding", "web-tools", "agent-profile-defaults", "agent-profile-models"];
 const browserSections: SettingsSection[] = ["frontend", "editor"];
 
 const themeOptions: SelectOption[] = [
@@ -701,6 +708,11 @@ watch(activeScope, (scope) => {
                         <div v-else-if="activeSection === 'models'" key="models">
                             <!-- 注意：ModelSettingsPanel 内部不使用 h-full，让外层自动撑开或根据内容滚动 -->
                             <NovelIdeModelSettingsPanel :key="`models:${settingsPanelKey}`" :scope="activeScope === 'project' ? 'project' : 'global'" :target-query="targetQuery" :target-label="targetLabel" />
+                        </div>
+
+                        <!-- Embedding 服务设定 -->
+                        <div v-else-if="activeSection === 'embedding'" key="embedding">
+                            <NovelIdeEmbeddingSettingsPanel :key="`embedding:${settingsPanelKey}`" :scope="activeScope === 'project' ? 'project' : 'global'" :target-query="targetQuery" :target-label="targetLabel" />
                         </div>
 
                         <!-- 费用显示设定 -->

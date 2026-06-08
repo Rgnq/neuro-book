@@ -429,3 +429,51 @@
 - 后续如确实需要，增加跨进程替换 `runtime/bun/` 的二阶段 updater。
 - 后续把 Workspace Root 可配置化后，移除 `app/workspace -> data/workspace` 目录联接策略。
 - 在干净 Windows 机器上完整跑双击启动验收。
+
+## Product Profile Artifact Portability Fix
+
+### User Request
+
+- 检查并系统性修复 `v0.1.2-canary.20260607.103349Z.f58434f` Windows 包中 writer profile 不可用的问题。
+- 用户报错包含：
+    - `Cannot find module '@libsql/win32-x64-msvc' from 'D:\a\neuro-book\neuro-book\product.output\server\index.mjs'`
+    - `Cannot find module 'C:\neuro-book-windows-x64\data\workspace.nbook\agent\profiles.compiled\builtin__director...building.mjs' from ''`
+
+### Diagnosis
+
+- release zip 内实际包含 `app/.output/server/node_modules/@libsql/win32-x64-msvc`，不是单纯缺 Windows native optional package。
+- 真正根因是 Product Root 内重新编译的系统 profile artifact 第一行写死了 CI 构建机路径：`createRequire("file:///D:/a/neuro-book/neuro-book/product/.output/server/index.mjs")`。
+- 这些 `.compiled/*.mjs` 会随 system assets 同步到 `data/workspace/.nbook/agent/profiles/.compiled`；用户机器运行时仍从 CI 路径解析 native/dynamic require，于是报 `@libsql/win32-x64-msvc` 缺失。
+- `.building.mjs` 报错不是 release zip 系统 manifest 固有条目；zip 内系统 manifest 没有 `.building`。它对应编译临时 artifact 名，被用户侧坏 manifest 或编译中断/竞态状态引用。正常 manifest 必须只引用稳定文件名。
+
+### Decisions
+
+- Product Runtime 下的 profile artifact 不再把 `.output/server/index.mjs` 的绝对 file URL 写进 bundle。
+- Product profile artifact 的 require shim 运行时优先使用当前 Product Root cwd 下的 `.output/server/index.mjs`；找不到时再从当前 artifact 位置向上查找 Product Root，最后才回退 `import.meta.url`。
+- 单文件 profile 编译也改为先写 `.agent/workspace/profile-artifact-build/<uuid>` staging 目录，再原子提交到真实 `.compiled`，避免真实用户 `.compiled` 暴露 `*.building.mjs` 临时文件。
+- `product:stage` 和 `package:windows-portable` 增加 Product profile artifact portability 断言：发现构建机绝对路径、`D:/a/neuro-book/` 或固定 Product Root file URL 时直接失败。
+- user-assets 同步继续只在系统副本/未手改路径上自动修复 compiled artifact；手改用户 profile 不会被静默覆盖。
+
+### Files Changed
+
+- `server/agent/profiles/profile-artifact-compiler.ts`
+- `server/agent/profiles/catalog.test.ts`
+- `server/workspace-files/workspace-files.test.ts`
+- `scripts/deploy/product-runtime.mjs`
+- `scripts/deploy/windows-portable.mjs`
+- `docs/tasks/26-windows-portable-packaging/README.md`
+- `PROJECT-STATUS.md`
+
+### Verification
+
+- 已执行：
+    - `bun vitest run server/agent/profiles/catalog.test.ts`
+    - `bun vitest run server/workspace-files/workspace-files.test.ts -t "同步系统 assets 会修复用户 profile manifest 指向 building artifact"`
+    - `bun vitest run server/workspace-files/workspace-files.test.ts -t "同步系统 assets 会修复用户 profile manifest 与 artifact 不一致"`
+    - `bun run product:stage` 在旧 `.output` 下先被新 portability 断言拦截，证明门禁能抓到旧问题。
+    - `bun run nuxt:build`
+    - `bun run product:stage`
+    - 扫描 `product/assets/workspace/.nbook/agent/profiles/.compiled/*.mjs`，确认 11 个系统 artifact 都包含 `__nbookResolveProductRequireRoot`，且不含绝对 `file:///C:/...` 或 `D:/a/...`。
+    - `bun run package:windows-portable -- --skip-git-check --output .agent/workspace/windows-package-fix-smoke/neuro-book-windows-x64.zip`
+    - 读取 smoke zip 条目，确认 zip 内 11 个系统 profile artifact 都使用 runtime resolver，不含绝对 Product require、`D:/a` 或 `.building.mjs`。
+    - `bun vitest run server/agent/profiles/catalog.test.ts server/workspace-files/workspace-files.test.ts -t "Product profile artifact|building artifact|单文件编译失败|profile manifest"`，4 个相关测试通过。

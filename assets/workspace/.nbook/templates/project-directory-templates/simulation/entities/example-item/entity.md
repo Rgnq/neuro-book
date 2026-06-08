@@ -13,5 +13,5 @@ displayName: 示例物品
 - `prototype` 指向 lorebook 原型或规则来源；没有真实原型时保持 `null`，不要填写不存在的路径。
 - 连接到真实 lorebook 后可改成类似 `lorebook/item/consumable/blood-potion/` 的 Project Workspace 相对路径。
 - 这个引用不是 subject 可见性授权。
-- subject 是否知道该实例真相，由 `simulation/subjects/{id}/events.md` 与 `knowledge.md` 决定。
+- subject 是否知道该实例真相，由 `simulation/subjects/{id}/events.jsonl` 与 `memory.jsonl` 决定。
 - 真实可变状态写在同目录 `state.md`。

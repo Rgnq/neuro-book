@@ -67,7 +67,7 @@ Project 模板创建了默认 simulation 目录。
 
 ## Subject Updates
 
-初始化时按需写入 subject `events.md`、`knowledge.md`、`mind.md` 和 `state.md`。
+初始化时按需写入 subject `events.jsonl`、`memory.jsonl`、`mind.md` 和 `state.md`。
 
 ## Entity Updates
 
@@ -75,7 +75,7 @@ Project 模板创建了默认 simulation 目录。
 
 ## Information Boundary
 
-不要把完整上帝视角 lorebook 复制进 subject `knowledge.md`。subject 只能知道自己经历、被告知、观察或自然推断到的信息。
+不要把完整上帝视角 lorebook 复制进 subject `memory.jsonl`。subject 只能知道自己经历、被告知、观察或自然推断到的信息。
 
 ## Plot Consequences
 

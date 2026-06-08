@@ -9,7 +9,7 @@ Sidecar Context（旁路上下文）是 profile 声明的旁路 run。它会在 
 Sidecar 适合这些场景：
 
 - actor 主 run 前加载角色可知设定。
-- actor 主 run 后更新 `events.md`、`knowledge.md`、`mind.md`。
+- actor 主 run 后更新 `events.jsonl`、`memory.jsonl`、`mind.md`。
 - writer 写作前检索相关 lorebook。
 - simulator leader 推进前做规则或状态审计。
 
@@ -19,10 +19,14 @@ Sidecar 不适合确定性上下文注入。确定性内容应优先用 profile 
 
 `simulator.actor` 已接入两个典型 sidecar：
 
-- `actor.context-load`：主 run 前读取 subject 文件并整理 actor-safe context。
-- `actor.memory-save`：主 run 后维护 subject-facing 记忆文件。
+- `actor.context-load`：主 run 前读取小型 subject 文件，调用 `subject_rag_search` 检索当前 subject 的 `events.jsonl` / `memory.jsonl`，再整理 actor-safe context。
+- `actor.memory-save`：主 run 后通过 `subject_event_append` 追加 `events.jsonl`，通过 `memory_bio` 维护 `memory.jsonl`，并更新 `mind.md`。
 
 主 run 仍保持角色扮演纯度。actor 不直接读取完整 `simulation/`、`lorebook/`、`reference/` 或其他 subject。
+
+`actor.context-load` 的结果会以 `<actor_sidecar_context>` 写入 actor session。它不是一次性的隐藏注入；后续 run 和 compaction 都可以看到这条由 Harness 持久化的 actor-safe context。若注入后上下文超过模型窗口，父 invocation 会失败。
+
+Subject RAG 只检索当前 subject 自己的记忆，不检索 lorebook 或 Project 全局文件。详细机制见 [Subject RAG 记忆](./subject-rag-memory.md)。
 
 ## 工具权限
 
@@ -32,4 +36,5 @@ Sidecar 的 `allowedToolKeys` 必须是当前 profile 工具集合的子集。pr
 
 - [Sidecar Profile Pass Reference](https://github.com/notnotype/neuro-book/blob/master/reference/agent/sidecar-profile-pass.md)
 - [Agent 上下文构成](https://github.com/notnotype/neuro-book/blob/master/reference/agent/context.md)
+- [Subject RAG Reference](https://github.com/notnotype/neuro-book/blob/master/reference/content/subject-rag-memory.md)
 - [RP 教程：进入世界模拟](/tutorials/06-enter-world-simulation)

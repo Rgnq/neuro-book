@@ -60,7 +60,7 @@
 | --- | --- | --- | --- |
 | `leader.default` | 用户助理 / 总协调者 / 监工 | 理解用户目标；拆分任务；选择 specialist；监督产物质量；把 specialist 的结果解释给用户；必要时请求用户确认关键取舍 | 不长期包干 `simulation/` 推演；不长期设计 Thread / Scene / Plot；不直接写正式章节正文 |
 | `simulator.leader` | 世界模拟器主管 | 根据用户、director 或 leader 的指令模拟 `simulation/`；遵循 `AGENTS.md`、`agent-context/simulator.leader/context.md`、subject/entity state 和已确认 canon；裁决状态变化；调度 `simulator.actor` 等子 simulator；产出 state commit、writer-safe brief、director handoff | 不设计长期剧情结构；不写正式正文；不把隐藏信息直接暴露给 subject-facing 输出 |
-| `simulator.actor` | 单个 subject 的模拟器 | 基于 subject-facing packet 与自身 `subject.md`、`events.md`、`knowledge.md`、`mind.md`、`state.md` 模拟角色反应；返回给 `simulator.leader` | 不读取 god-view lorebook；不裁决全局世界状态；不替其它 subject 做决定 |
+| `simulator.actor` | 单个 subject 的模拟器 | 基于 subject-facing packet、sidecar 注入的 actor-safe context 与自身 `subject.md`、`events.jsonl`、`memory.jsonl`、`mind.md`、`state.md` 模拟角色反应；返回给 `simulator.leader` | 不读取 god-view lorebook；不裁决全局世界状态；不替其它 subject 做决定 |
 | `director` | 剧情导演 | 管理和设计 Thread / Scene / Plot；控制剧情节奏、冲突、伏笔、回收和推进方向；把确认后的剧情设计写入 Plot System；向 writer 提供可写的剧情结构 | 不维护 `simulation/subjects` 或 `simulation/entities` 的运行态；不写正式正文；不绕过 simulator 做世界状态裁决 |
 | `writer` | 普通章节正文 writer | 根据目标章节、Chapter Plot、director/leader 提供的上下文和显式 `lorebookEntries` 写正式章节正文 | 不设计 Plot；不维护 simulation；不自行检索或吞并 director/simulator 职责 |
 | `rp.writer` | legacy RP 正文渲染器 | 根据 RP / simulation brief 渲染用户可见正文 | 第一阶段保留 legacy，不急于并入普通 `writer` |
@@ -169,7 +169,7 @@ RP 模式第一版：
 
 - 可以读取 god-view lorebook / Plot / simulation state，但不能把隐藏信息直接发给 subject。
 - 可以维护 `simulation/subjects/*/state.md`、`simulation/entities/**`、`simulation/runs/**`。
-- 不直接维护 subject `knowledge.md`、`mind.md`、`events.md`；这类文件由 `simulator.actor` sidecar 或后续 subject memory 机制维护。
+- 不直接维护 subject `events.jsonl`、`memory.jsonl`、`mind.md`；这类文件由 `simulator.actor` sidecar 或后续 subject memory 机制维护。
 - 不写正式正文。
 - 不设计长期 Thread / Scene / Plot；它只输出 director 可用的因果推演、状态后果和剧情机会。
 - 不替用户决定核心行动；重大不可逆裁决进入 `open_questions`。
@@ -180,7 +180,7 @@ RP 模式第一版：
 2. Project/simulation path contract：说明 cwd、`projectPath`、`simulationRoot` 和内容节点路径规则。
 3. Information boundary：GM/god-view 可读；subject-facing packet 必须过滤。
 4. Simulation workflow：intake -> context read -> actor selection -> actor-facing packets -> resolve -> state commit -> handoff。
-5. State write rules：什么能写 state/entity/run，什么不能写 subject knowledge/mind/events。
+5. State write rules：什么能写 state/entity/run，什么不能写 subject events/memory/mind。
 6. Output contract：必须 `report_result`，并返回 writer-safe brief / director handoff / plot handoff。
 
 ### `simulator.actor`
@@ -193,8 +193,8 @@ RP 模式第一版：
 - input schema 使用 `SubjectSimulatorInputSchema`，命名上是 subject simulator，而不是 RP-only actor。
 - 主 run 继续不主动读写文件；subject 文件通过 profile context 自动注入。
 - context-load sidecar 负责读取和过滤 actor-safe context。
-- memory-save sidecar 维护 `events.md`、`knowledge.md`、`mind.md`。
-- 修正旧口径：subject-facing `knowledge.md` 不应保留可直接展开的 lorebook Markdown link；source ref 应隐藏/internal，或由 `simulator.leader` / sidecar 过滤成 actor-safe 摘要。
+- memory-save sidecar 维护 `events.jsonl`、`memory.jsonl`、`mind.md`。
+- 修正旧口径：subject-facing `memory.jsonl` 不应保留可直接展开的 lorebook Markdown link；source ref 应隐藏/internal，或由 `simulator.leader` / sidecar 过滤成 actor-safe 摘要。
 
 ### `director`
 
@@ -508,7 +508,7 @@ Plot 是行动级节拍，不是五段式大纲。
 
 Resolved mismatch:
 
-- `simulator.actor` prompt 已修正：`knowledge.md` 不应新增可直接展开的 lorebook Markdown link；需要来源时使用经过 GM / sidecar 过滤的 subject-facing 摘要，内部 source ref 交给 simulator leader / sidecar 管理。
+- `simulator.actor` prompt 已修正：subject memory 不应新增可直接展开的 lorebook Markdown link；需要来源时使用经过 GM / sidecar 过滤的 subject-facing 摘要，内部 source ref 交给 simulator leader / sidecar 管理。
 
 ## Implementation V1
 
@@ -533,7 +533,7 @@ Resolved mismatch:
 - `simulator.leader` prompt 强化读取顺序：先遵守 `AGENTS.md` 与 `agent-context/simulator.leader/context.md`，冲突时以 `AGENTS.md` 为准；再按需读取最近 tick、相关 lorebook、Plot 和 state。
 - `simulator.leader` 负责持有和调度 emulator；为需要模拟的 subject 创建或复用 `simulator.actor`，并逐个发送 actor-facing packet。
 - 新建 subject / entity 默认先通过 `open_questions` 或 `state_change_requests` 报告，获批后再创建；明确全自动下一 tick 时可以直接推进但必须报告提交内容。
-- `simulator.actor` 主 run 不再直接读取 `subject.md`、`events.md`、`knowledge.md`、`mind.md`、`state.md` 原文；这些文件只由 context-load / memory-save sidecar 使用。
+- `simulator.actor` 主 run 不再直接读取 `subject.md`、`events.jsonl`、`memory.jsonl`、`mind.md`、`state.md` 原文；这些文件只由 context-load / memory-save sidecar 使用。
 - `simulator.actor` 主 run 只消费 actor binding 元数据、`<actor_sidecar_context>` 和 GM 当前消息，并新增角色视角标签协议。
 - user-assets 覆盖层中的旧 `workspace/.nbook/agent/profiles/builtin/leader.rp.profile.tsx` 与 sync state 残留已删除，避免 catalog 继续暴露旧 RP 入口。
 
@@ -542,7 +542,7 @@ Resolved mismatch:
 - `simulator.leader` 第一版需要 `write` / `edit` / `apply_patch` 维护 simulation state，但当前工具没有 profile 内路径 scope；只能先靠提示词边界限制写入 `simulation/subjects/*/state.md`、`simulation/entities/**`、`simulation/runs/**`。后续如果 Harness 支持工具路径 scope，应把它变成 runtime 级约束。
 - `director` 第一版不直接调用 `writer`，避免职责扩大；如果后续要做全自动章节生产链，需要重新讨论 director -> writer 的直接调用边界。
 - `simulator.actor` 已作为唯一 subject simulator profile 落地，`leader.rp` 与 `simulator.leader` 均调度该 profile。
-- `simulator.actor` 已禁止在 `knowledge.md` 新增可直接展开的 lorebook Markdown link；后续如果需要保留 source ref，需要设计内部 source ref 的稳定格式。
+- `simulator.actor` 已禁止在 subject memory 中新增可直接展开的 lorebook Markdown link；后续如果需要保留 source ref，需要设计内部 source ref 的稳定格式。
 - `create_story_plots` V1 只支持同一 Scene 追加；如果 director 后续需要整场重写、局部插入或批量精修，还需要讨论 `replace_scene_plots` / `update_story_plots`。
 - Plot System Agent Spec 已迁移到 `reference/plot/agent-spec.md`；后续风险是实际写作时摘要密度和 Plot 数量可能需要继续调参。
 - 写作 workflow skill 文件名仍保留 `novel-workflow-05-emulation-bootstrap` / `06-emulation-tick` 旧名；正文口径已统一到 `simulation` / `simulator`，是否改文件名留到后续迁移。

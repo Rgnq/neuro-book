@@ -80,8 +80,8 @@ export const SubjectSimulatorInputSchema = Type.Object({
     actorName: Type.Optional(Type.String({description: "角色可读名。为空时使用 actorId。"})),
     kind: Type.Optional(Type.String({description: "actor 类型，例如 player、npc、faction、system。"})),
     instructionPath: Type.String({description: "subject simulator 指令文件路径，必须相对于 Agent cwd，例如 project-slug/simulation/subjects/erina/subject.md。"}),
-    eventsPath: Type.String({description: "角色事件流水路径，必须相对于 Agent cwd，例如 project-slug/simulation/subjects/erina/events.md。"}),
-    knowledgePath: Type.String({description: "角色可知世界书路径，必须相对于 Agent cwd，例如 project-slug/simulation/subjects/erina/knowledge.md。"}),
+    eventsPath: Type.String({description: "角色经历流 JSONL 路径，必须相对于 Agent cwd，例如 project-slug/simulation/subjects/erina/events.jsonl。"}),
+    memoryPath: Type.String({description: "角色稳定认知 JSONL 路径，必须相对于 Agent cwd，例如 project-slug/simulation/subjects/erina/memory.jsonl。"}),
     mindPath: Type.String({description: "角色当前思维文件路径，必须相对于 Agent cwd，例如 project-slug/simulation/subjects/erina/mind.md。"}),
     statePath: Type.String({description: "角色当前状态文件路径，必须相对于 Agent cwd，例如 project-slug/simulation/subjects/erina/state.md。"}),
 });
@@ -93,6 +93,33 @@ export const SubjectSimulatorOutputSchema = Type.Object({
     visible_response: Type.String({description: "角色在场景中可被观察到的动作、神态、姿态、沉默或行为反应；没有则填空字符串。"}),
     spoken_dialogue: Type.String({description: "角色明确说出口的台词；没有则填空字符串。"}),
     inner_response: Type.String({description: "角色没有直接说出口的情绪、意图、判断、误解或短期打算；没有则填空字符串。"}),
+});
+
+/**
+ * memory.curator 的输入。调用方报告 facts，不指定具体 patch 操作。
+ */
+export const MemoryCuratorInputSchema = Type.Object({
+    subjectPath: Type.String({description: "被维护的 subject directory path。"}),
+    facts: Type.String({description: "本轮新增的 subject-facing facts。不要写具体 JSON Patch 操作要求。"}),
+    currentMemories: Type.Array(Type.Object({
+        topic: Type.String({description: "当前认知主体。"}),
+        aliases: Type.Optional(Type.Array(Type.String(), {description: "旧称、模糊称呼或合并后的别名。"})),
+        view: Type.String({description: "角色对该主体的当前看法、理解、态度、关系判断、误解或修正。"}),
+    }), {description: "当前 memory.jsonl 内容。"}),
+});
+
+/**
+ * memory.curator 通过 report_result.data 返回 JSON Patch。
+ */
+export const MemoryCuratorOutputSchema = Type.Object({
+    reason: Type.String({description: "为什么需要或不需要更新 memory.jsonl。"}),
+    patch: Type.Array(Type.Object({
+        op: Type.String({description: "RFC 6902 operation: add/remove/replace/move/copy/test."}),
+        path: Type.String({description: "JSON Pointer path."}),
+        from: Type.Optional(Type.String({description: "move/copy 的来源 JSON Pointer。"})),
+        value: Type.Optional(Type.Unknown({description: "add/replace/test 的值。"})),
+    }), {description: "应用到 SubjectMemory[] 的 JSON Patch。无更新返回空数组。"}),
+    summary: Type.String({description: "人类可读更新摘要。"}),
 });
 
 /**

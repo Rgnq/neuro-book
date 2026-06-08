@@ -11,7 +11,7 @@ import {profileText} from "nbook/server/agent/profiles/profile-text";
 export const profileManifest = {
     key: "simulator.actor",
     name: "Subject Simulator",
-    description: "通用 subject simulator：基于 subject 指令、knowledge/mind/state 和 simulator leader 的戏内消息回应，通过 report_result 返回结构化 subject packet。",
+    description: "通用 subject simulator：基于 subject 指令、RAG memory、mind/state 和 simulator leader 的戏内消息回应，通过 report_result 返回结构化 subject packet。",
 } as const;
 
 export const InputSchema = SubjectSimulatorInputSchema;
@@ -20,7 +20,7 @@ export const OutputSchema = SubjectSimulatorOutputSchema;
 export type Input = Static<typeof InputSchema>;
 export type Output = Static<typeof OutputSchema>;
 
-const allowedToolKeys = ["read", "write", "edit", "report_result"] as const;
+const allowedToolKeys = ["subject_rag_search", "subject_event_append", "memory_bio", "read", "edit", "report_result"] as const;
 
 const ActorContextLoadSidecarSchema = Type.Object({
     actor_safe_context: Type.String({description: "准备注入 actor 主 run 的角色可知设定摘要；没有额外信息时写空字符串。"}),
@@ -31,8 +31,8 @@ const ActorContextLoadSidecarSchema = Type.Object({
 
 const ActorMemorySaveSidecarSchema = Type.Object({
     changed_files: Type.Array(Type.String({description: "本次实际修改的文件路径；没有修改返回空数组。"})),
-    events_summary: Type.String({description: "events.md 的更新摘要；没有修改写空字符串。"}),
-    knowledge_summary: Type.String({description: "knowledge.md 的更新摘要；没有修改写空字符串。"}),
+    events_summary: Type.String({description: "events.jsonl 的更新摘要；没有修改写空字符串。"}),
+    memory_summary: Type.String({description: "memory.jsonl 的更新摘要；没有修改写空字符串。"}),
     mind_summary: Type.String({description: "mind.md 的更新摘要；没有修改写空字符串。"}),
     skipped: Type.Array(Type.String({description: "本次没有写入的原因、被跳过的更新或交给其他系统处理的内容。"})),
     needs_review: Type.Array(Type.String({description: "需要上级模拟器后续裁决或确认的信息。"})),
@@ -45,12 +45,12 @@ type ActorMemorySaveSidecarData = Static<typeof ActorMemorySaveSidecarSchema>;
 const actorContextLoadPass: SidecarProfilePass<Input, ActorContextLoadSidecarData> = {
     name: "actor.context-load",
     stage: "prepareRun",
-    allowedToolKeys: ["read", "report_result"],
+    allowedToolKeys: ["subject_rag_search", "read", "report_result"],
     sidecarDataSchema: ActorContextLoadSidecarSchema,
     enterPrompt: (ctx) => profileText`
         退出角色扮演模式。你现在是 subject simulator 的 context-load 旁路，不要扮演角色，不要输出角色台词。
 
-        目标：在 actor 主扮演 run 开始前，基于当前 subject 文件和上级模拟器明确给出的 actor-facing 路径，整理该角色合理可知的补充设定。
+        目标：在 actor 主扮演 run 开始前，基于当前 subject 直接文件、subject RAG 和上级模拟器明确给出的 actor-facing 路径，整理该角色合理可知的补充设定。
 
         当前 actor：
         - actorId: ${ctx.input.actorId}
@@ -58,12 +58,15 @@ const actorContextLoadPass: SidecarProfilePass<Input, ActorContextLoadSidecarDat
         - kind: ${ctx.input.kind?.trim() || "未指定"}
         - instructionPath: ${ctx.input.instructionPath}
         - eventsPath: ${ctx.input.eventsPath}
-        - knowledgePath: ${ctx.input.knowledgePath}
+        - memoryPath: ${ctx.input.memoryPath}
         - mindPath: ${ctx.input.mindPath}
         - statePath: ${ctx.input.statePath}
 
         规则：
-        - 你可以读取当前 subject 自己的 subject.md、events.md、knowledge.md、mind.md、state.md。
+        - 你可以读取当前 subject 自己的 subject.md、mind.md、state.md。
+        - 你应优先调用 subject_rag_search 检索当前 subject 的 events.jsonl / memory.jsonl，而不是直接读取完整 events.jsonl / memory.jsonl。
+        - subject_rag_search 只做粗召回；你负责 rerank、去重、过滤和压缩。
+        - 注入预算：最多保留 6 条相关过往经历和 4 条相关稳定认知，并限制 actor_safe_context 总长度。
         - 你可以读取当前消息中明确列出的 actor-safe lorebook 或 context 路径，并过滤成 actor-safe 摘要。
         - 不要自行搜索或遍历 lorebook；只读取当前消息明确提供的 actor-safe 路径。
         - 不要读取 agent-context/simulator.leader/context.md、agent-context/rp.writer/context.md、simulation/runs、调度草稿、其他 subject 目录或 reference 原始素材。
@@ -77,7 +80,7 @@ const actorContextLoadPass: SidecarProfilePass<Input, ActorContextLoadSidecarDat
         const data = result.sidecarData;
         const context = data.actor_safe_context.trim() || "本 Tick 没有额外 actor-safe 设定注入。";
         return {
-            runtimeMessages: [
+            persistedMessages: [
                 createUserMessage({
                     text: profileText`
                         <actor_sidecar_context source="actor.context-load">
@@ -97,18 +100,18 @@ const actorContextLoadPass: SidecarProfilePass<Input, ActorContextLoadSidecarDat
 const actorMemorySavePass: SidecarProfilePass<Input, ActorMemorySaveSidecarData> = {
     name: "actor.memory-save",
     stage: "settleRun",
-    allowedToolKeys: ["read", "write", "edit", "report_result"],
+    allowedToolKeys: ["subject_event_append", "memory_bio", "read", "edit", "report_result"],
     sidecarDataSchema: ActorMemorySaveSidecarSchema,
     enterPrompt: (ctx) => profileText`
         退出角色扮演模式。你现在是 subject simulator 的 memory-save 旁路，不要继续扮演角色，不要新增角色台词或行动。
 
-        目标：根据刚刚完成的 actor 主 run 结果，维护该 actor 的 events.md、knowledge.md 与 mind.md。
+        目标：根据刚刚完成的 actor 主 run 结果，维护该 actor 的 events.jsonl、memory.jsonl 与 mind.md。
 
         当前 actor：
         - actorId: ${ctx.input.actorId}
         - actorName: ${ctx.input.actorName?.trim() || ctx.input.actorId}
         - eventsPath: ${ctx.input.eventsPath}
-        - knowledgePath: ${ctx.input.knowledgePath}
+        - memoryPath: ${ctx.input.memoryPath}
         - mindPath: ${ctx.input.mindPath}
         - statePath: ${ctx.input.statePath}
 
@@ -116,12 +119,14 @@ const actorMemorySavePass: SidecarProfilePass<Input, ActorMemorySaveSidecarData>
         ${formatJson(ctx.runResult?.reportResult?.data)}
 
         写入规则：
-        - 只允许读取和修改 eventsPath、knowledgePath 与 mindPath。
+        - 只允许维护 eventsPath、memoryPath 与 mindPath。
         - 不要修改 subject.md。
         - 不要修改 statePath；如果主 run 的可见反应暗示状态变化，只在 skipped 或 needs_review 中说明交给上级模拟器 / 后续状态系统处理。
-        - events.md 只写 subject 视角事件流水：这个角色本 Tick 经历了什么、听见什么、被告知什么、怎么获得某条信息。
-        - events.md 不写外部推理、真实隐藏设定、其他角色私密知识或完整 packet。
-        - knowledge.md 只写角色已经知道、被告知、观察到或自然推断到的信息，不写外部推理、真实隐藏设定或其他角色私密知识。
+        - 调用 subject_event_append 追加 events.jsonl，不要直接 edit/write events.jsonl。
+        - events.jsonl 只写 subject 视角经历流：这个角色本 Tick 经历了什么、听见什么、被告知什么、当时怎么想、怎么产生误解或完成推理。
+        - events.jsonl 不写外部推理、真实隐藏设定、其他角色私密知识或完整 packet。
+        - 如果本轮造成稳定认知变化，调用 memory_bio，只报告 subject-facing facts；不要自己指定合并、删除、改名或 JSON Patch 操作。
+        - memory.jsonl 记录角色对某个主体的当前看法、理解、态度、关系判断、误解或修正，不写外部推理、真实隐藏设定或其他角色私密知识。
         - mind.md 只写角色当前想法、判断、犹豫、情绪或动机，不写世界真相。
         - 根据 visible_response、spoken_dialogue、inner_response 和本轮上下文判断是否需要更新。
         - 如果没有真实新增信息，或者现有文件已经覆盖该信息，不要为了更新而改文件。
@@ -135,7 +140,7 @@ const actorMemorySavePass: SidecarProfilePass<Input, ActorMemorySaveSidecarData>
             runtimeState: {
                 changed_files: result.sidecarData.changed_files,
                 events_summary: result.sidecarData.events_summary,
-                knowledge_summary: result.sidecarData.knowledge_summary,
+                memory_summary: result.sidecarData.memory_summary,
                 mind_summary: result.sidecarData.mind_summary,
                 skipped: result.sidecarData.skipped,
                 needs_review: result.sidecarData.needs_review,
@@ -187,7 +192,7 @@ function renderSystemPrompt(input: Input, profileKey: string): string {
 
         <actor_context_contract>
             - 你只知道 <actor_sidecar_context>、当前 user message 中的戏内标签，以及上级模拟器明确给你的可感知信息。
-            - 你看不到 subject.md、events.md、knowledge.md、mind.md、state.md 原文；这些只由 sidecar 过滤后注入。
+            - 你看不到 subject.md、events.jsonl、memory.jsonl、mind.md、state.md 原文；这些只由 sidecar 过滤后注入。
             - 你不能把隐藏真相、调度方推理、其他角色私密想法、未注入的 lorebook 设定当成自己知道的事实。
             - 主扮演阶段不要调用 read、write 或 edit；文件维护由 actor.context-load / actor.memory-save 旁路处理。
         </actor_context_contract>
@@ -243,7 +248,7 @@ function renderActorBinding(input: Input): string {
         kind: ${input.kind?.trim() || "未指定"}
         instructionPath: ${input.instructionPath}
         eventsPath: ${input.eventsPath}
-        knowledgePath: ${input.knowledgePath}
+        memoryPath: ${input.memoryPath}
         mindPath: ${input.mindPath}
         statePath: ${input.statePath}
 

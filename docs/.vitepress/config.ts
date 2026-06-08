@@ -56,6 +56,7 @@ export default defineConfig({
           { text: 'Agent 心智模型', link: '/agent/' },
           { text: '工具', link: '/agent/tools' },
           { text: 'Sidecar', link: '/agent/sidecar' },
+          { text: 'Subject RAG 记忆', link: '/agent/subject-rag-memory' },
           { text: 'Agent Harness', link: '/agent/advanced' }
         ]
       },

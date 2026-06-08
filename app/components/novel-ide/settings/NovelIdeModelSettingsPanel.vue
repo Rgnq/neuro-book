@@ -428,7 +428,9 @@ function applyProjectSettings(snapshot: ConfigEditorSnapshotDto): void {
         defaultModelKey: readProjectDefaultModelKey(snapshot),
         providers: snapshot.modelSettings.providers.map(cloneProvider),
     };
-    snapshotText.value = JSON.stringify({defaultModelKey: draft.value.defaultModelKey});
+    snapshotText.value = JSON.stringify({
+        defaultModelKey: draft.value.defaultModelKey,
+    });
     activeProviderId.value = draft.value.providers[0]?.id ?? "";
     discoveredModels.value = {};
     resolvedContextWindowMap.value = Object.fromEntries(
@@ -794,7 +796,9 @@ const activeProvider = computed<ProviderDraft | null>(() => {
  */
 const dirty = computed(() => {
     if (isProjectScope.value) {
-        return JSON.stringify({defaultModelKey: draft.value.defaultModelKey}) !== snapshotText.value;
+        return JSON.stringify({
+            defaultModelKey: draft.value.defaultModelKey,
+        }) !== snapshotText.value;
     }
     return projectReferencesDirty.value || JSON.stringify(buildSavePayload()) !== snapshotText.value;
 });

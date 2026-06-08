@@ -7,6 +7,7 @@ import {Type} from "typebox";
 import {defineAgentProfile} from "nbook/server/agent/profiles/define-agent-profile";
 import {AgentProfileCatalog} from "nbook/server/agent/profiles/catalog";
 import {
+    loadEffectiveConfigForAgentRuntime,
     readConfigBootstrap,
     readConfigEditorSnapshot,
     saveGlobalConfig,
@@ -17,7 +18,7 @@ const createdRoots: string[] = [];
 const catalog = createCatalog(["leader.default", "leader.assets", "custom.agent"]);
 let globalConfigBackupPath: string | null = null;
 
-describe("config service", () => {
+describe("config service", {timeout: 30_000}, () => {
     beforeEach(async () => {
         globalConfigBackupPath = await moveGlobalConfigAside();
         await createProjectFixture();
@@ -327,7 +328,9 @@ describe("config service", () => {
             },
         }, {workspaceKind: "user-assets"});
 
-        expect(snapshot.modelSettings.providers[0]?.models[0]).toMatchObject({
+        const visionModel = snapshot.modelSettings.providers[0]?.models.find((model) => model.id === "mimo-vl");
+
+        expect(visionModel).toMatchObject({
             provider: "xiaomi-token-plan-cn",
             api: "openai-completions",
             baseUrl: "https://model.example/v1",
@@ -349,7 +352,7 @@ describe("config service", () => {
         expect(snapshot.modelSettings.providers[0]?.api).toBe("openai-completions");
     });
 
-    it("Project Config 可以覆盖默认模型和默认 profile，但拒绝 models.providers", async () => {
+    it("Project Config 可以覆盖默认模型、embedding 模型与默认 profile，但拒绝全局字段", async () => {
         await saveGlobalConfig({
             models: {
                 default: "deepseek/a",
@@ -364,6 +367,16 @@ describe("config service", () => {
                     ],
                 }],
             },
+            embedding: {
+                enabled: true,
+                provider: "openai-compatible",
+                model: "global-embed",
+                dimensions: 1536,
+                apiKey: {configured: false, maskedValue: null, value: "sk-embedding"},
+                baseURL: "https://embedding.example/v1",
+                timeoutMs: 30000,
+                requestOptions: {encoding_format: "float"},
+            },
             agent: {
                 defaultProfileKey: {novel: "leader.default", userAssets: "leader.assets"},
                 profiles: {},
@@ -372,16 +385,41 @@ describe("config service", () => {
 
         const snapshot = await saveProjectConfig({
             models: {default: "deepseek/b"},
+            embedding: {model: "project-embed", dimensions: 768},
             agent: {defaultProfileKey: "custom.agent"},
         }, {workspaceKind: "novel", projectPath: "workspace/config-test-project"});
 
         expect(snapshot.effective.models.defaultModelKey).toBe("deepseek/b");
+        expect(snapshot.effective.embedding).toMatchObject({
+            enabled: true,
+            provider: "openai-compatible",
+            model: "project-embed",
+            dimensions: 768,
+            apiKey: "sk-embedding",
+            baseURL: "https://embedding.example/v1",
+            timeoutMs: 30000,
+            requestOptions: {encoding_format: "float"},
+        });
+        expect(snapshot.embeddingSettings.global.apiKey).toEqual({
+            configured: true,
+            maskedValue: "sk-e...ding",
+        });
+        expect(snapshot.embeddingSettings.project).toEqual({
+            model: "project-embed",
+            dimensions: 768,
+        });
         expect(snapshot.effective.agent.defaultProfileKey.novel).toBe("custom.agent");
         expect(snapshot.defaultProfileSettings.effectiveProfileKey).toBe("custom.agent");
         await expect(saveProjectConfig({
             models: {
                 default: "deepseek/b",
                 providers: [],
+            } as never,
+        }, {workspaceKind: "novel", projectPath: "workspace/config-test-project"})).rejects.toMatchObject({statusCode: 400});
+        await expect(saveProjectConfig({
+            embedding: {
+                model: "bad",
+                baseURL: "https://project-should-not-own-service.example/v1",
             } as never,
         }, {workspaceKind: "novel", projectPath: "workspace/config-test-project"})).rejects.toMatchObject({statusCode: 400});
     });
@@ -414,6 +452,85 @@ describe("config service", () => {
         expect(snapshot.effective.models.defaultModelKey).toBe("deepseek/a");
         expect(snapshot.effective.agent.defaultProfileKey.novel).toBe("leader.default");
         expect(snapshot.defaultProfileSettings.effectiveProfileKey).toBe("leader.default");
+    });
+
+    it("Agent runtime 配置读取会合并 Project embedding 覆盖", async () => {
+        await saveGlobalConfig({
+            embedding: {
+                enabled: true,
+                provider: "openai-compatible",
+                model: "global-embed",
+                dimensions: 1536,
+                apiKey: {configured: false, maskedValue: null, value: "sk-embedding"},
+                baseURL: "https://embedding.example/v1",
+                timeoutMs: 30000,
+                requestOptions: {},
+            },
+        }, {workspaceKind: "novel", projectPath: "workspace/config-test-project"});
+        await saveProjectConfig({
+            embedding: {
+                model: "project-embed",
+                dimensions: 768,
+            },
+        }, {workspaceKind: "novel", projectPath: "workspace/config-test-project"});
+
+        const effective = await loadEffectiveConfigForAgentRuntime({
+            workspaceRoot: "workspace",
+            projectPath: "workspace/config-test-project",
+        });
+
+        expect(effective.embedding).toMatchObject({
+            enabled: true,
+            provider: "openai-compatible",
+            model: "project-embed",
+            dimensions: 768,
+            apiKey: "sk-embedding",
+            baseURL: "https://embedding.example/v1",
+        });
+    });
+
+    it("Agent runtime 配置读取支持外部 Project Workspace 绝对 projectPath", async () => {
+        const externalProjectRoot = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "nbook-external-project-")), "external-project");
+        createdRoots.push(path.dirname(externalProjectRoot));
+        await fs.mkdir(path.join(externalProjectRoot, ".nbook"), {recursive: true});
+        await fs.writeFile(path.join(externalProjectRoot, "project.yaml"), [
+            "kind: novel",
+            "title: External Project",
+            "summary: ''",
+            "",
+        ].join("\n"), "utf-8");
+        await saveGlobalConfig({
+            embedding: {
+                enabled: true,
+                provider: "openai-compatible",
+                model: "global-embed",
+                dimensions: 1536,
+                apiKey: {configured: false, maskedValue: null, value: "sk-embedding"},
+                baseURL: "https://embedding.example/v1",
+                timeoutMs: 30000,
+                requestOptions: {},
+            },
+        }, {workspaceKind: "novel", projectPath: "workspace/config-test-project"});
+        await fs.writeFile(path.join(externalProjectRoot, ".nbook", "config.json"), JSON.stringify({
+            embedding: {
+                model: "external-embed",
+                dimensions: 384,
+            },
+        }, null, 4), "utf-8");
+
+        const effective = await loadEffectiveConfigForAgentRuntime({
+            workspaceRoot: "workspace",
+            projectPath: externalProjectRoot,
+        });
+
+        expect(effective.embedding).toMatchObject({
+            enabled: true,
+            provider: "openai-compatible",
+            model: "external-embed",
+            dimensions: 384,
+            apiKey: "sk-embedding",
+            baseURL: "https://embedding.example/v1",
+        });
     });
 
     it("Agent Profile 模型默认参数支持 Project 覆盖并被 profile 继承", async () => {

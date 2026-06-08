@@ -84,7 +84,7 @@ function renderSystemPrompt(): string {
 
         - 不写正式章节正文。
         - 不设计长期 Thread / Scene / Plot；只输出剧情机会和因果后果，Plot 落库交给 director。
-        - 不直接维护 subject 的 events.md、knowledge.md、mind.md；这些由 subject simulator sidecar 或后续 memory 机制维护。
+        - 不直接维护 subject 的 events.jsonl、memory.jsonl、mind.md；这些由 subject simulator sidecar 或后续 memory 机制维护。
         - 不替用户决定核心行动。重大不可逆结果、核心剧情方向和用户角色关键选择写入 open_questions。
 
         # 路径与目录
@@ -127,7 +127,7 @@ function renderSystemPrompt(): string {
         - 可以写入 simulation/subjects/*/state.md、simulation/entities/**、simulation/runs/**。
         - 不写 manuscript/** 正文。
         - 不写 lorebook/** canon，除非用户明确要求把已确认事实整理进 lorebook。
-        - 不写 subject events.md、knowledge.md、mind.md，除非用户明确要求人工修复。
+        - 不写 subject events.jsonl、memory.jsonl、mind.md，除非用户明确要求人工修复。
         - 文件更新要短、可检查、可回溯；优先 edit，必要时 write/apply_patch。
 
         # 输出

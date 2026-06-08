@@ -68,9 +68,7 @@ export async function compileProfileArtifacts(options: CompileProfileArtifactsOp
     const profileRoot = resolve(options.profileRoot);
     const compiledDir = join(profileRoot, PROFILE_COMPILED_DIR_NAME);
     const fullCompile = !options.fileName;
-    const buildCompiledDir = fullCompile
-        ? resolve(process.cwd(), ".agent", "workspace", "profile-artifact-build", randomUUID())
-        : compiledDir;
+    const buildCompiledDir = resolve(process.cwd(), ".agent", "workspace", "profile-artifact-build", randomUUID());
     await mkdir(buildCompiledDir, {recursive: true});
     const existingManifest = await readProfileArtifactManifest(profileRoot);
     const targetFiles = options.fileName
@@ -104,13 +102,7 @@ export async function compileProfileArtifacts(options: CompileProfileArtifactsOp
             profiles: nextProfiles,
         };
         const manifestPath = profileArtifactManifestPath(profileRoot);
-        if (fullCompile) {
-            await commitCompiledArtifacts(buildCompiledDir, compiledDir, manifest);
-        } else {
-            await mkdir(compiledDir, {recursive: true});
-            await writeJsonIfChanged(manifestPath, manifest);
-            await pruneCompiledArtifacts(compiledDir, manifest);
-        }
+        await commitCompiledArtifacts(buildCompiledDir, compiledDir, manifest);
         return {
             manifest,
             compiledDir,
@@ -118,9 +110,7 @@ export async function compileProfileArtifacts(options: CompileProfileArtifactsOp
             compiled,
         };
     } finally {
-        if (fullCompile) {
-            await rm(buildCompiledDir, {recursive: true, force: true});
-        }
+        await rm(buildCompiledDir, {recursive: true, force: true});
     }
 }
 
@@ -546,7 +536,14 @@ function runtimeRequireBanner(): string {
     if (!isProductRuntimeRoot()) {
         return 'import {createRequire as __nbookCreateRequire} from "node:module";const require=__nbookCreateRequire(import.meta.url);';
     }
-    return `import {createRequire as __nbookCreateRequire} from "node:module";const require=__nbookCreateRequire(${JSON.stringify(pathToFileURL(resolvePackageRequireRoot()).href)});`;
+    return [
+        'import {createRequire as __nbookCreateRequire} from "node:module";',
+        'import {existsSync as __nbookExistsSync} from "node:fs";',
+        'import {dirname as __nbookDirname, resolve as __nbookResolve} from "node:path";',
+        'import {fileURLToPath as __nbookFileURLToPath} from "node:url";',
+        'function __nbookResolveProductRequireRoot(){const cwdEntry=__nbookResolve(process.cwd(),".output","server","index.mjs");if(__nbookExistsSync(cwdEntry))return cwdEntry;let current=__nbookDirname(__nbookFileURLToPath(import.meta.url));while(true){const entry=__nbookResolve(current,".output","server","index.mjs");if(__nbookExistsSync(entry))return entry;const parent=__nbookDirname(current);if(parent===current)return import.meta.url;current=parent;}}',
+        "const require=__nbookCreateRequire(__nbookResolveProductRequireRoot());",
+    ].join("");
 }
 
 function repoAliasBundlePlugin(): Plugin {

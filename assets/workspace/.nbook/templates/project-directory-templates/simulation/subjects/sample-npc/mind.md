@@ -2,7 +2,7 @@
 
 本文件记录示例 NPC 当前正在想什么、判断什么、疑虑什么。它是角色视角，不等于世界真相。
 
-导致这些想法变化的事件优先记录在 `events.md`；真实位置、持有物和伤势由 simulator leader 裁决后写入 `state.md`。
+导致这些想法变化的事件优先记录在 `events.jsonl`；稳定认知沉淀到 `memory.jsonl`；真实位置、持有物和伤势由 simulator leader 裁决后写入 `state.md`。
 
 ## 当前想法
 

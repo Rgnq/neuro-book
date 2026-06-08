@@ -176,6 +176,11 @@ type SidecarRunContext = {
     finalResult?: InvokeAgentResult;
 };
 
+type AppliedSidecarMerge = {
+    persistedMessagesWritten: boolean;
+    runtimeMessagesInjected: boolean;
+};
+
 type InvocationAdmission = {
     snapshot: SessionSnapshot | null;
     pendingUserMessage: Message | null;
@@ -376,6 +381,7 @@ export class NeuroAgentHarness {
                 runtimeState,
                 caller,
             });
+            const runtimeOnlySidecarMessages: AgentMessage[] = [];
             await this.runSidecarPasses({
                 stage: "prepareRun",
                 sidecarRun: {
@@ -399,7 +405,16 @@ export class NeuroAgentHarness {
                     abortSignal: abortController.signal,
                 },
                 applyRuntimeMessages(messages) {
+                    runtimeOnlySidecarMessages.push(...messages);
                     preparedRun.messages.push(...messages);
+                },
+                applyPersistedContext(update) {
+                    preparedRun.snapshot = update.snapshot;
+                    preparedRun.context = update.context;
+                    preparedRun.messages = [
+                        ...update.context.messages,
+                        ...runtimeOnlySidecarMessages,
+                    ];
                 },
             });
             errorPhase = "model";
@@ -3833,15 +3848,44 @@ export class NeuroAgentHarness {
         stage: SidecarProfilePassStage;
         sidecarRun: SidecarRunContext;
         applyRuntimeMessages?: (messages: AgentMessage[]) => void;
-    }): Promise<void> {
+        applyPersistedContext?: (update: {snapshot: SessionSnapshot; context: NeuroSessionContext}) => void;
+    }): Promise<AppliedSidecarMerge> {
+        const applied: AppliedSidecarMerge = {
+            persistedMessagesWritten: false,
+            runtimeMessagesInjected: false,
+        };
         const passes = (input.sidecarRun.profile.sidecars ?? []).filter((pass) => pass.stage === input.stage);
         for (const pass of passes) {
             const mergePlan = await this.runSidecarPass(pass, input.sidecarRun);
+            this.validateSidecarMergePlan(input.stage, pass.name, mergePlan);
+            if (mergePlan.persistedMessages?.length) {
+                await this.executeWritePlan({
+                    target: {sessionId: input.sidecarRun.sessionId},
+                    cause: `sidecar.${pass.name}.persistedMessages`,
+                    ops: [{
+                        kind: "appendMany",
+                        entries: mergePlan.persistedMessages.map((message) => ({
+                            type: "message" as const,
+                            message,
+                            origin: "harness" as const,
+                        })),
+                    }],
+                }, input.sidecarRun.invocationId);
+                const snapshot = await this.repo.readSession(input.sidecarRun.sessionId, input.sidecarRun.snapshot.metadata.workspaceKey);
+                const context = this.repo.reduce(snapshot);
+                input.sidecarRun.snapshot = snapshot;
+                input.sidecarRun.context = context;
+                input.sidecarRun.messages = context.messages;
+                input.applyPersistedContext?.({snapshot, context});
+                applied.persistedMessagesWritten = true;
+            }
             if (mergePlan.runtimeMessages?.length) {
-                if (input.stage !== "prepareRun") {
-                    throw new Error(`sidecar ${pass.name} 的 runtimeMessages 只能在 prepareRun 阶段注入主 run。`);
-                }
                 input.applyRuntimeMessages?.(mergePlan.runtimeMessages);
+                input.sidecarRun.messages.push(...mergePlan.runtimeMessages);
+                applied.runtimeMessagesInjected = true;
+            }
+            if (input.stage === "prepareRun" && (mergePlan.persistedMessages?.length || mergePlan.runtimeMessages?.length)) {
+                this.assertSidecarInjectedContextWithinWindow(pass.name, input.sidecarRun);
             }
             if (mergePlan.runtimeState !== undefined) {
                 input.sidecarRun.runtimeState.set(`sidecar.${pass.name}`, mergeRuntimeState(input.sidecarRun.runtimeState.get(`sidecar.${pass.name}`), mergePlan.runtimeState));
@@ -3850,6 +3894,7 @@ export class NeuroAgentHarness {
                 await this.writeExecutor.execute(mergePlan.writePlans, input.sidecarRun.invocationId);
             }
         }
+        return applied;
     }
 
     private async runSidecarPass(pass: SidecarProfilePass, sidecarRun: SidecarRunContext): Promise<SidecarMergePlan> {
@@ -3900,6 +3945,25 @@ export class NeuroAgentHarness {
         }
         const sidecarResult = this.readSidecarResult(pass, result);
         return await pass.merge(context, sidecarResult);
+    }
+
+    private validateSidecarMergePlan(stage: SidecarProfilePassStage, passName: string, mergePlan: SidecarMergePlan): void {
+        if (mergePlan.runtimeMessages?.length && stage !== "prepareRun") {
+            throw new Error(`sidecar ${passName} 的 runtimeMessages 只能在 prepareRun 阶段注入主 run。`);
+        }
+        for (const message of mergePlan.persistedMessages ?? []) {
+            if (message.role !== "user") {
+                throw new Error(`sidecar ${passName} 的 persistedMessages 第一版只允许 user message。`);
+            }
+        }
+    }
+
+    private assertSidecarInjectedContextWithinWindow(passName: string, frame: Pick<RunFrame, "messages" | "model">): void {
+        const usage = estimateContextTokens(frame.messages);
+        if (usage.tokens <= frame.model.contextWindow) {
+            return;
+        }
+        throw new Error(`sidecar ${passName} 注入后上下文 ${usage.tokens} tokens 已超过模型 ${frame.model.id} 的 ${frame.model.contextWindow} token 限制。`);
     }
 
     private createSidecarContext(pass: SidecarProfilePass, sidecarRun: SidecarRunContext): SidecarContext {
@@ -4079,14 +4143,8 @@ function mergeRuntimeState(previous: JsonValue | undefined, next: JsonValue): Js
 }
 
 async function loadEffectiveConfig(input: {workspaceRoot?: string; projectPath?: string}): Promise<EffectiveConfig> {
-    const {
-        loadEffectiveConfig: loadEffectiveConfigByQuery,
-        loadEffectiveConfigForWorkspaceRoot,
-    } = await import("nbook/server/config/config-service");
-    if (input.projectPath) {
-        return loadEffectiveConfigByQuery({workspaceKind: "novel", projectPath: input.projectPath});
-    }
-    return loadEffectiveConfigForWorkspaceRoot(input.workspaceRoot);
+    const {loadEffectiveConfigForAgentRuntime} = await import("nbook/server/config/config-service");
+    return loadEffectiveConfigForAgentRuntime(input);
 }
 
 /**

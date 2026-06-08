@@ -1,6 +1,6 @@
 import {randomUUID} from "node:crypto";
 import {mkdir, readFile, rm, writeFile} from "node:fs/promises";
-import {join} from "node:path";
+import {join, resolve} from "node:path";
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
 import {fauxAssistantMessage, fauxText, fauxToolCall, registerFauxProvider} from "@earendil-works/pi-ai";
 import type {FauxProviderRegistration} from "@earendil-works/pi-ai";
@@ -1434,7 +1434,157 @@ describe("NeuroAgentHarness", () => {
         expect(result.status).toBe("error");
         expect(result.errorInfo?.message).toContain("未声明 compaction 配置");
         expect(result.errorInfo?.message).toContain("超过模型");
-    });
+    }, 30_000);
+
+    it("prepareRun sidecar 注入后超出模型窗口时不会进入主 provider", async () => {
+        let mainProviderCalls = 0;
+        const smallWindowHarness = new NeuroAgentHarness({
+            repo: harness.repo,
+            modelResolver: () => ({
+                ...faux.getModel(),
+                contextWindow: 1,
+            }),
+            enableSessionSummarizer: false,
+        });
+        harness = smallWindowHarness;
+        harness.profiles.register(defineAgentProfile({
+            manifest: {
+                key: "test.sidecar-overflow",
+                name: "Sidecar Overflow",
+            },
+            inputSchema: Type.Object({}),
+            allowedToolKeys: ["report_result"],
+            compaction: {},
+            sidecars: [{
+                name: "actor.context-load",
+                stage: "prepareRun",
+                allowedToolKeys: ["report_result"],
+                sidecarDataSchema: Type.Object({}),
+                enterPrompt: "检索并整理本轮 actor 可知设定。",
+                merge() {
+                    return {
+                        persistedMessages: [
+                            createUserMessage({text: "this persisted sidecar context is too large for the tiny window"}),
+                        ],
+                    };
+                },
+            }],
+            prepare() {
+                return {};
+            },
+        }), false);
+        faux.setResponses([
+            () => fauxAssistantMessage([
+                fauxToolCall("report_result", {
+                    result: "loaded",
+                    sidecar_data: {},
+                }, {id: "sidecar-report"}),
+            ], {stopReason: "toolUse"}),
+            () => {
+                mainProviderCalls += 1;
+                return fauxAssistantMessage("main should not run");
+            },
+        ]);
+        const created = await harness.createAgent({
+            profileKey: "test.sidecar-overflow",
+            input: {},
+            workspaceRoot: root,
+        });
+
+        const result = await harness.invokeAgent({
+            sessionId: created.sessionId,
+            mode: "prompt",
+            message: {text: "run"},
+        });
+        const context = harness.repo.reduce(await harness.repo.readSession(created.sessionId));
+
+        expect(result.status).toBe("error");
+        expect(result.errorInfo?.message).toContain("超过模型");
+        expect(mainProviderCalls).toBe(0);
+        expect(visibleMessageText(context.messages)).toContain("this persisted sidecar context is too large");
+    }, 30_000);
+
+    it("prepareRun sidecar 注入超窗后不会继续执行后续 sidecar", async () => {
+        let secondSidecarCalls = 0;
+        const smallWindowHarness = new NeuroAgentHarness({
+            repo: harness.repo,
+            modelResolver: () => ({
+                ...faux.getModel(),
+                contextWindow: 1,
+            }),
+            enableSessionSummarizer: false,
+        });
+        harness = smallWindowHarness;
+        harness.profiles.register(defineAgentProfile({
+            manifest: {
+                key: "test.sidecar-overflow-before-next-sidecar",
+                name: "Sidecar Overflow Before Next Sidecar",
+            },
+            inputSchema: Type.Object({}),
+            allowedToolKeys: ["report_result"],
+            sidecars: [
+                {
+                    name: "actor.context-load",
+                    stage: "prepareRun",
+                    allowedToolKeys: ["report_result"],
+                    sidecarDataSchema: Type.Object({}),
+                    enterPrompt: "检索并整理本轮 actor 可知设定。",
+                    merge() {
+                        return {
+                            persistedMessages: [
+                                createUserMessage({text: "the first sidecar injects too much context for the tiny window"}),
+                            ],
+                        };
+                    },
+                },
+                {
+                    name: "actor.second-context-load",
+                    stage: "prepareRun",
+                    allowedToolKeys: ["report_result"],
+                    sidecarDataSchema: Type.Object({}),
+                    enterPrompt: "第二个 sidecar 不应该执行。",
+                    merge() {
+                        return {};
+                    },
+                },
+            ],
+            prepare() {
+                return {};
+            },
+        }), false);
+        faux.setResponses([
+            () => fauxAssistantMessage([
+                fauxToolCall("report_result", {
+                    result: "loaded",
+                    sidecar_data: {},
+                }, {id: "first-sidecar-report"}),
+            ], {stopReason: "toolUse"}),
+            () => {
+                secondSidecarCalls += 1;
+                return fauxAssistantMessage([
+                    fauxToolCall("report_result", {
+                        result: "second",
+                        sidecar_data: {},
+                    }, {id: "second-sidecar-report"}),
+                ], {stopReason: "toolUse"});
+            },
+        ]);
+        const created = await harness.createAgent({
+            profileKey: "test.sidecar-overflow-before-next-sidecar",
+            input: {},
+            workspaceRoot: root,
+        });
+
+        const result = await harness.invokeAgent({
+            sessionId: created.sessionId,
+            mode: "prompt",
+            message: {text: "run"},
+        });
+
+        expect(result.status).toBe("error");
+        expect(result.errorInfo?.message).toContain("sidecar actor.context-load 注入后上下文");
+        expect(secondSidecarCalls).toBe(0);
+    }, 30_000);
 
     it("profile reasoningEffort 会传给支持 reasoning 的模型", async () => {
         await mkdir(join(root, ".nbook"), {recursive: true});
@@ -2230,6 +2380,238 @@ describe("NeuroAgentHarness", () => {
         expect(visibleMessageText(context.messages)).not.toContain("loaded");
     }, 30_000);
 
+    it("prepareRun sidecar 可以持久化注入主 run context", async () => {
+        const providerPrompts: string[] = [];
+        harness.profiles.register(defineAgentProfile({
+            manifest: {
+                key: "test.sidecar-persisted-context-load",
+                name: "Sidecar Persisted Context Load",
+            },
+            inputSchema: Type.Object({}),
+            allowedToolKeys: ["report_result"],
+            sidecars: [{
+                name: "actor.context-load",
+                stage: "prepareRun",
+                allowedToolKeys: ["report_result"],
+                sidecarDataSchema: Type.Object({
+                    context: Type.String(),
+                }),
+                enterPrompt: "检索并整理本轮 actor 可知设定。",
+                merge(_ctx, result) {
+                    const sidecarData = result.sidecarData as {context: string};
+                    return {
+                        persistedMessages: [
+                            createUserMessage({text: `PERSISTED_ACTOR_SAFE_CONTEXT:${sidecarData.context}`}),
+                        ],
+                    };
+                },
+            }],
+            prepare() {
+                return {};
+            },
+        }), false);
+        faux.setResponses([
+            () => fauxAssistantMessage([
+                fauxToolCall("report_result", {
+                    result: "loaded",
+                    sidecar_data: {
+                        context: "SAFE_LORE",
+                    },
+                }, {id: "sidecar-report"}),
+            ], {stopReason: "toolUse"}),
+            (context) => {
+                providerPrompts.push(context.messages.map((message) => messageText(message as RuntimeMessage)).join("\n"));
+                return fauxAssistantMessage([
+                    fauxText("main done"),
+                    fauxToolCall("report_result", {
+                        result: "main",
+                    }, {id: "main-report"}),
+                ], {stopReason: "toolUse"});
+            },
+        ]);
+        const created = await harness.createAgent({
+            profileKey: "test.sidecar-persisted-context-load",
+            input: {},
+            workspaceRoot: root,
+        });
+
+        const result = await harness.invokeAgent({
+            sessionId: created.sessionId,
+            mode: "prompt",
+            message: {text: "run"},
+        });
+        const snapshot = await harness.repo.readSession(created.sessionId);
+        const context = harness.repo.reduce(snapshot);
+        const sidecarEntry = snapshot.entries.find((entry) => {
+            return entry.type === "message" && messageText(entry.message).includes("PERSISTED_ACTOR_SAFE_CONTEXT:SAFE_LORE");
+        });
+
+        expect(result.status).toBe("completed");
+        expect(providerPrompts[0]).toContain("PERSISTED_ACTOR_SAFE_CONTEXT:SAFE_LORE");
+        expect(context.messages.map((message) => message.role)).toEqual(["user", "user", "assistant", "toolResult"]);
+        expect(visibleMessageText(context.messages)).toContain("PERSISTED_ACTOR_SAFE_CONTEXT:SAFE_LORE");
+        expect(sidecarEntry).toEqual(expect.objectContaining({
+            type: "message",
+            origin: "harness",
+        }));
+        expect(visibleMessageText(context.messages)).not.toContain("loaded");
+    }, 30_000);
+
+    it("prepareRun sidecar 同时支持 runtime-only 和 persisted 注入", async () => {
+        const providerPrompts: string[] = [];
+        harness.profiles.register(defineAgentProfile({
+            manifest: {
+                key: "test.sidecar-mixed-context-load",
+                name: "Sidecar Mixed Context Load",
+            },
+            inputSchema: Type.Object({}),
+            allowedToolKeys: ["report_result"],
+            sidecars: [{
+                name: "actor.context-load",
+                stage: "prepareRun",
+                allowedToolKeys: ["report_result"],
+                sidecarDataSchema: Type.Object({}),
+                enterPrompt: "检索并整理本轮 actor 可知设定。",
+                merge() {
+                    return {
+                        persistedMessages: [
+                            createUserMessage({text: "PERSISTED_CONTEXT"}),
+                        ],
+                        runtimeMessages: [
+                            createUserMessage({text: "RUNTIME_ONLY_CONTEXT"}),
+                        ],
+                    };
+                },
+            }],
+            prepare() {
+                return {};
+            },
+        }), false);
+        faux.setResponses([
+            () => fauxAssistantMessage([
+                fauxToolCall("report_result", {
+                    result: "loaded",
+                    sidecar_data: {},
+                }, {id: "sidecar-report"}),
+            ], {stopReason: "toolUse"}),
+            (context) => {
+                providerPrompts.push(context.messages.map((message) => messageText(message as RuntimeMessage)).join("\n"));
+                return fauxAssistantMessage("main done");
+            },
+        ]);
+        const created = await harness.createAgent({
+            profileKey: "test.sidecar-mixed-context-load",
+            input: {},
+            workspaceRoot: root,
+        });
+
+        const result = await harness.invokeAgent({
+            sessionId: created.sessionId,
+            mode: "prompt",
+            message: {text: "run"},
+        });
+        const context = harness.repo.reduce(await harness.repo.readSession(created.sessionId));
+        const mainPrompt = providerPrompts[0];
+
+        expect(result.status).toBe("completed");
+        expect(mainPrompt).toBeDefined();
+        if (!mainPrompt) {
+            throw new Error("缺少 main run prompt。");
+        }
+        expect(mainPrompt).toContain("PERSISTED_CONTEXT");
+        expect(mainPrompt).toContain("RUNTIME_ONLY_CONTEXT");
+        expect(mainPrompt.indexOf("PERSISTED_CONTEXT")).toBeLessThan(mainPrompt.indexOf("RUNTIME_ONLY_CONTEXT"));
+        expect(visibleMessageText(context.messages)).toContain("PERSISTED_CONTEXT");
+        expect(visibleMessageText(context.messages)).not.toContain("RUNTIME_ONLY_CONTEXT");
+    }, 30_000);
+
+    it("prepareRun 多个 sidecar 持久化注入时不会冲掉先前 runtime-only 注入", async () => {
+        const providerPrompts: string[] = [];
+        harness.profiles.register(defineAgentProfile({
+            manifest: {
+                key: "test.sidecar-runtime-before-persisted-context",
+                name: "Sidecar Runtime Before Persisted Context",
+            },
+            inputSchema: Type.Object({}),
+            allowedToolKeys: ["report_result"],
+            sidecars: [
+                {
+                    name: "actor.runtime-context-load",
+                    stage: "prepareRun",
+                    allowedToolKeys: ["report_result"],
+                    sidecarDataSchema: Type.Object({}),
+                    enterPrompt: "注入本轮 runtime-only 设定。",
+                    merge() {
+                        return {
+                            runtimeMessages: [
+                                createUserMessage({text: "FIRST_RUNTIME_ONLY_CONTEXT"}),
+                            ],
+                        };
+                    },
+                },
+                {
+                    name: "actor.persisted-context-load",
+                    stage: "prepareRun",
+                    allowedToolKeys: ["report_result"],
+                    sidecarDataSchema: Type.Object({}),
+                    enterPrompt: "注入本轮 persisted 设定。",
+                    merge() {
+                        return {
+                            persistedMessages: [
+                                createUserMessage({text: "SECOND_PERSISTED_CONTEXT"}),
+                            ],
+                        };
+                    },
+                },
+            ],
+            prepare() {
+                return {};
+            },
+        }), false);
+        faux.setResponses([
+            () => fauxAssistantMessage([
+                fauxToolCall("report_result", {
+                    result: "runtime loaded",
+                    sidecar_data: {},
+                }, {id: "runtime-sidecar-report"}),
+            ], {stopReason: "toolUse"}),
+            () => fauxAssistantMessage([
+                fauxToolCall("report_result", {
+                    result: "persisted loaded",
+                    sidecar_data: {},
+                }, {id: "persisted-sidecar-report"}),
+            ], {stopReason: "toolUse"}),
+            (context) => {
+                providerPrompts.push(context.messages.map((message) => messageText(message as RuntimeMessage)).join("\n"));
+                return fauxAssistantMessage("main done");
+            },
+        ]);
+        const created = await harness.createAgent({
+            profileKey: "test.sidecar-runtime-before-persisted-context",
+            input: {},
+            workspaceRoot: root,
+        });
+
+        const result = await harness.invokeAgent({
+            sessionId: created.sessionId,
+            mode: "prompt",
+            message: {text: "run"},
+        });
+        const context = harness.repo.reduce(await harness.repo.readSession(created.sessionId));
+        const mainPrompt = providerPrompts[0];
+
+        expect(result.status).toBe("completed");
+        expect(mainPrompt).toBeDefined();
+        if (!mainPrompt) {
+            throw new Error("缺少 main run prompt。");
+        }
+        expect(mainPrompt).toContain("FIRST_RUNTIME_ONLY_CONTEXT");
+        expect(mainPrompt).toContain("SECOND_PERSISTED_CONTEXT");
+        expect(mainPrompt.indexOf("SECOND_PERSISTED_CONTEXT")).toBeLessThan(mainPrompt.indexOf("FIRST_RUNTIME_ONLY_CONTEXT"));
+        expect(visibleMessageText(context.messages)).not.toContain("FIRST_RUNTIME_ONLY_CONTEXT");
+        expect(visibleMessageText(context.messages)).toContain("SECOND_PERSISTED_CONTEXT");
+    }, 30_000);
+
     it("settleRun sidecar 可以在主 run 后执行并写入 merge writePlans", async () => {
         harness.profiles.register(defineAgentProfile({
             manifest: {
@@ -2308,7 +2690,68 @@ describe("NeuroAgentHarness", () => {
         expect(visibleMessageText(context.messages)).not.toContain("saved");
     });
 
-    it("simulator.actor 会通过 context-load 注入 actor-safe 设定，并通过 memory-save 更新 knowledge/mind", async () => {
+    it("settleRun sidecar 返回非法 runtimeMessages 时不会先写 persistedMessages", async () => {
+        harness.profiles.register(defineAgentProfile({
+            manifest: {
+                key: "test.sidecar-invalid-settle-merge",
+                name: "Sidecar Invalid Settle Merge",
+            },
+            inputSchema: Type.Object({}),
+            allowedToolKeys: ["report_result"],
+            sidecars: [{
+                name: "actor.memory-save",
+                stage: "settleRun",
+                allowedToolKeys: ["report_result"],
+                sidecarDataSchema: Type.Object({}),
+                enterPrompt: "保存本轮 actor 记忆。",
+                merge() {
+                    return {
+                        persistedMessages: [
+                            createUserMessage({text: "SHOULD_NOT_BE_WRITTEN"}),
+                        ],
+                        runtimeMessages: [
+                            createUserMessage({text: "INVALID_RUNTIME_MESSAGE"}),
+                        ],
+                    };
+                },
+            }],
+            prepare() {
+                return {};
+            },
+        }), false);
+        faux.setResponses([
+            () => fauxAssistantMessage([
+                fauxText("main done"),
+                fauxToolCall("report_result", {
+                    result: "main",
+                }, {id: "main-report"}),
+            ], {stopReason: "toolUse"}),
+            () => fauxAssistantMessage([
+                fauxToolCall("report_result", {
+                    result: "saved",
+                    sidecar_data: {},
+                }, {id: "sidecar-report"}),
+            ], {stopReason: "toolUse"}),
+        ]);
+        const created = await harness.createAgent({
+            profileKey: "test.sidecar-invalid-settle-merge",
+            input: {},
+            workspaceRoot: root,
+        });
+
+        const result = await harness.invokeAgent({
+            sessionId: created.sessionId,
+            mode: "prompt",
+            message: {text: "run"},
+        });
+        const context = harness.repo.reduce(await harness.repo.readSession(created.sessionId));
+
+        expect(result.status).toBe("error");
+        expect(result.errorInfo?.message).toContain("runtimeMessages 只能在 prepareRun");
+        expect(visibleMessageText(context.messages)).not.toContain("SHOULD_NOT_BE_WRITTEN");
+    }, 30_000);
+
+    it("simulator.actor 会通过 context-load 注入 actor-safe 设定，并通过 memory-save 更新 events/memory/mind", async () => {
         const profiles = new AgentProfileCatalog(
             join(root, "missing-system-profiles"),
             join(root, "missing-user-profiles"),
@@ -2322,11 +2765,76 @@ describe("NeuroAgentHarness", () => {
         });
         const projectSlug = `rp-project-${randomUUID()}`;
         const actorRoot = join(root, projectSlug, "simulation", "subjects", "heroine");
+        rpHarness.tools.register({
+            key: "subject_rag_search",
+            name: "subject_rag_search",
+            label: "Search Subject RAG",
+            executionMode: "parallel",
+            description: "test subject rag search",
+            parameters: Type.Object({}),
+            async executeWithContext() {
+                return {
+                    content: [{type: "text", text: "RAG: 她知道这块五彩石被一些传闻称为世界之心。"}],
+                    details: {
+                        candidates: [{
+                            source: "memory",
+                            text: "她知道这块五彩石被一些传闻称为世界之心。",
+                            topic: "世界之心",
+                            rank: 1,
+                            sourcePath: "memory.jsonl",
+                        }],
+                    },
+                };
+            },
+            async execute() {
+                throw new Error("test only");
+            },
+        });
+        rpHarness.tools.register({
+            key: "subject_event_append",
+            name: "subject_event_append",
+            label: "Append Subject Events",
+            executionMode: "sequential",
+            description: "test subject event append",
+            parameters: Type.Object({}),
+            async executeWithContext() {
+                await writeFile(join(actorRoot, "events.jsonl"), [
+                    "{\"text\":\"她刚抵达学院区广场。\"}",
+                    "{\"text\":\"主角把一块疑似被称为世界之心的五彩石交给了她。\"}",
+                    "",
+                ].join("\n"), "utf-8");
+                return {
+                    content: [{type: "text", text: "appended event"}],
+                    details: {appended: 1},
+                };
+            },
+            async execute() {
+                throw new Error("test only");
+            },
+        });
+        rpHarness.tools.register({
+            key: "memory_bio",
+            name: "memory_bio",
+            label: "Curate Subject Memory",
+            executionMode: "sequential",
+            description: "test memory bio",
+            parameters: Type.Object({}),
+            async executeWithContext() {
+                await writeFile(join(actorRoot, "memory.jsonl"), "{\"topic\":\"世界之心\",\"view\":\"我知道主角把一块疑似被称为世界之心的五彩石交给了我，但我不知道它的隐藏真相。\"}\n", "utf-8");
+                return {
+                    content: [{type: "text", text: "curated memory"}],
+                    details: {status: "updated"},
+                };
+            },
+            async execute() {
+                throw new Error("test only");
+            },
+        });
         await mkdir(actorRoot, {recursive: true});
         await mkdir(join(root, projectSlug, "lorebook", "world"), {recursive: true});
         await writeFile(join(actorRoot, "subject.md"), "保持礼貌但警惕，遇到未知物品会先询问来源。", "utf-8");
-        await writeFile(join(actorRoot, "events.md"), "她刚抵达学院区广场。\n", "utf-8");
-        await writeFile(join(actorRoot, "knowledge.md"), "## 世界观\n\n### 已知物品\n\n她不知道世界之心的真名。\n", "utf-8");
+        await writeFile(join(actorRoot, "events.jsonl"), "{\"text\":\"她刚抵达学院区广场。\"}\n", "utf-8");
+        await writeFile(join(actorRoot, "memory.jsonl"), "{\"topic\":\"世界之心\",\"view\":\"她不知道世界之心的真名。\"}\n", "utf-8");
         await writeFile(join(actorRoot, "mind.md"), "她正在判断主角的用意。\n", "utf-8");
         await writeFile(join(actorRoot, "state.md"), "她位于学院区广场边缘，状态正常。\n", "utf-8");
         await writeFile(join(root, projectSlug, "lorebook", "world", "world-heart.md"), "世界之心公开表现为五彩石，隐藏真相是旧神核心。", "utf-8");
@@ -2338,9 +2846,13 @@ describe("NeuroAgentHarness", () => {
                 providerPrompts.push(promptText);
                 expect(promptText).toContain("sidecar: actor.context-load");
                 expect(promptText).toContain("五彩缤纷的石头");
-                expect(promptText).toContain("knowledgePath");
+                expect(promptText).toContain("memoryPath");
                 expect(promptText).not.toContain("她不知道世界之心的真名");
                 return fauxAssistantMessage([
+                    fauxToolCall("subject_rag_search", {
+                        subjectPath: `${projectSlug}/simulation/subjects/heroine`,
+                        query: "五彩缤纷的石头 世界之心",
+                    }, {id: "context-rag"}),
                     fauxToolCall("read", {
                         path: `${projectSlug}/lorebook/world/world-heart.md`,
                     }, {id: "context-read"}),
@@ -2372,16 +2884,9 @@ describe("NeuroAgentHarness", () => {
                     fauxToolCall("report_result", {
                         result: "actor responded",
                         data: {
-                            visible_action: "她垂眸看向掌心的五彩石，指尖微微收紧。",
+                            visible_response: "她垂眸看向掌心的五彩石，指尖微微收紧。",
                             spoken_dialogue: "这是什么？你从哪里得到它的？",
-                            private_intent: "她想先确认石头来源，再决定是否交还。",
-                            emotional_state: "警惕且好奇。",
-                            assumptions: ["这块石头不像普通矿物。"],
-                            questions_to_gm: [],
-                            event_update: "主角把一块疑似被称为世界之心的五彩石交给了她。",
-                            knowledge_update: "主角把一块疑似被称为世界之心的五彩石交给了她。",
-                            mind_update: "她开始怀疑主角知道更多内情，但暂时不追问过深。",
-                            state_update: "她暂时持有这块五彩石。",
+                            inner_response: "她想先确认石头来源，再决定是否交还。",
                         },
                     }, {id: "main-report"}),
                 ], {stopReason: "toolUse"});
@@ -2390,16 +2895,18 @@ describe("NeuroAgentHarness", () => {
                 const promptText = visibleMessageText(context.messages as AgentMessage[]);
                 providerPrompts.push(promptText);
                 expect(promptText).toContain("sidecar: actor.memory-save");
-                expect(promptText).toContain("主角把一块疑似被称为世界之心的五彩石交给了她");
                 expect(promptText).toContain("不要修改 statePath");
                 return fauxAssistantMessage([
-                    fauxToolCall("edit", {
-                        path: `${projectSlug}/simulation/subjects/heroine/knowledge.md`,
-                        edits: [{
-                            oldText: "她不知道世界之心的真名。\n",
-                            newText: "她不知道世界之心的真名。\n\n### 五彩石\n\n主角把一块疑似被称为世界之心的五彩石交给了她。\n",
+                    fauxToolCall("subject_event_append", {
+                        subjectPath: `${projectSlug}/simulation/subjects/heroine`,
+                        events: [{
+                            text: "主角把一块疑似被称为世界之心的五彩石交给了她。",
                         }],
-                    }, {id: "memory-edit-knowledge"}),
+                    }, {id: "memory-append-event"}),
+                    fauxToolCall("memory_bio", {
+                        subjectPath: `${projectSlug}/simulation/subjects/heroine`,
+                        facts: "主角把一块疑似被称为世界之心的五彩石交给了她；她仍不知道隐藏真相。",
+                    }, {id: "memory-bio"}),
                     fauxToolCall("edit", {
                         path: `${projectSlug}/simulation/subjects/heroine/mind.md`,
                         edits: [{
@@ -2414,14 +2921,15 @@ describe("NeuroAgentHarness", () => {
                     result: "memory saved",
                     sidecar_data: {
                         changed_files: [
-                            `${projectSlug}/simulation/subjects/heroine/knowledge.md`,
+                            `${projectSlug}/simulation/subjects/heroine/events.jsonl`,
+                            `${projectSlug}/simulation/subjects/heroine/memory.jsonl`,
                             `${projectSlug}/simulation/subjects/heroine/mind.md`,
                         ],
                         events_summary: "记录主角交给她疑似世界之心的五彩石。",
-                        knowledge_summary: "记录主角交给她疑似世界之心的五彩石。",
+                        memory_summary: "记录她对世界之心五彩石的当前认知。",
                         mind_summary: "记录她对主角隐瞒信息的怀疑。",
                         skipped: ["state_update 交给 GM / 后续状态系统处理。"],
-                        needs_gm_review: [],
+                        needs_review: [],
                     },
                 }, {id: "memory-report"}),
             ], {stopReason: "toolUse"}),
@@ -2433,8 +2941,8 @@ describe("NeuroAgentHarness", () => {
                 actorName: "绘璃奈",
                 kind: "npc",
                 instructionPath: `${projectSlug}/simulation/subjects/heroine/subject.md`,
-                eventsPath: `${projectSlug}/simulation/subjects/heroine/events.md`,
-                knowledgePath: `${projectSlug}/simulation/subjects/heroine/knowledge.md`,
+                eventsPath: `${projectSlug}/simulation/subjects/heroine/events.jsonl`,
+                memoryPath: `${projectSlug}/simulation/subjects/heroine/memory.jsonl`,
                 mindPath: `${projectSlug}/simulation/subjects/heroine/mind.md`,
                 statePath: `${projectSlug}/simulation/subjects/heroine/state.md`,
             },
@@ -2446,25 +2954,38 @@ describe("NeuroAgentHarness", () => {
             mode: "prompt",
             message: {text: "主角把一块五彩缤纷的石头交到你手里。石头隐约有异常力量感。"},
         });
-        const context = rpHarness.repo.reduce(await rpHarness.repo.readSession(created.sessionId));
-        const knowledge = await readFile(join(actorRoot, "knowledge.md"), "utf-8");
+        const snapshot = await rpHarness.repo.readSession(created.sessionId);
+        const context = rpHarness.repo.reduce(snapshot);
+        const events = await readFile(join(actorRoot, "events.jsonl"), "utf-8");
+        const memory = await readFile(join(actorRoot, "memory.jsonl"), "utf-8");
         const mind = await readFile(join(actorRoot, "mind.md"), "utf-8");
         const state = await readFile(join(actorRoot, "state.md"), "utf-8");
         const visibleText = visibleMessageText(context.messages);
+        const sidecarContextEntry = snapshot.entries.find((entry) => {
+            return entry.type === "message" && messageText(entry.message).includes("<actor_sidecar_context");
+        });
 
         expect(result.status).toBe("completed");
         expect(result.reportResult?.data).toEqual(expect.objectContaining({
             spoken_dialogue: "这是什么？你从哪里得到它的？",
         }));
         expect(providerPrompts).toHaveLength(4);
-        expect(knowledge).toContain("疑似被称为世界之心的五彩石");
+        expect(events).toContain("疑似被称为世界之心的五彩石");
+        expect(memory).toContain("疑似被称为世界之心的五彩石");
         expect(mind).toContain("怀疑主角知道更多内情");
         expect(state).toBe("她位于学院区广场边缘，状态正常。\n");
-        expect(context.messages.map((message) => message.role)).toEqual(["user", "user", "assistant", "toolResult"]);
+        expect(context.messages.map((message) => message.role).slice(-2)).toEqual(["assistant", "toolResult"]);
+        expect(context.messages.filter((message) => message.role === "user")).toHaveLength(5);
+        expect(sidecarContextEntry).toEqual(expect.objectContaining({
+            type: "message",
+            origin: "harness",
+        }));
+        expect(visibleText).toContain("<actor_sidecar_context");
         expect(visibleText).not.toContain("loaded actor-safe lore");
         expect(visibleText).not.toContain("memory saved");
         expect(visibleText).not.toContain("旧神核心");
-        expect(visibleText).not.toContain("<actor_sidecar_context");
+        expect(context.messages.at(-1)?.role).toBe("toolResult");
+        expect(messageText(context.messages.at(-1) as RuntimeMessage)).not.toContain("<actor_sidecar_context");
     });
 
     it("sidecar_data 不符合 schema 时父 run 失败", async () => {
@@ -4392,6 +4913,51 @@ describe("NeuroAgentHarness", () => {
 
         expect(observedDefaultModelKeys).toContain("project-provider/project-model");
     });
+
+    it("外部 Project Workspace session 首次运行使用绝对 projectPath 的 Project 默认模型", async () => {
+        const externalProjectRoot = resolve(root, "outside", "external-project").replaceAll("\\", "/");
+        await mkdir(join(externalProjectRoot, ".nbook"), {recursive: true});
+        await writeFile(join(externalProjectRoot, "project.yaml"), "kind: novel\ntitle: External Project\nsummary: ''\n", "utf8");
+        await writeFile(join(externalProjectRoot, ".nbook", "config.json"), JSON.stringify({
+            models: {
+                default: "external-provider/external-model",
+            },
+        }, null, 4), "utf8");
+
+        const observedDefaultModelKeys: Array<string | null> = [];
+        harness = new NeuroAgentHarness({
+            repo: harness.repo,
+            profiles: harness.profiles,
+            modelResolver: (config, profileKey, override) => {
+                expect(profileKey).toBe("leader.default");
+                expect(override).toBeUndefined();
+                observedDefaultModelKeys.push(config.models.defaultModelKey);
+                return faux.getModel();
+            },
+            enableSessionSummarizer: false,
+        });
+        faux.setResponses([fauxAssistantMessage("external done")]);
+        const created = await harness.createAgent({
+            profileKey: "leader.default",
+            input: {},
+            workspaceRoot: externalProjectRoot,
+            workspaceKey: "external-project",
+            projectPath: externalProjectRoot,
+        });
+
+        try {
+            const result = await harness.invokeAgent({
+                sessionId: created.sessionId,
+                mode: "prompt",
+                message: {text: "use external default"},
+            });
+
+            expect(result.status).toBe("completed");
+            expect(observedDefaultModelKeys).toContain("external-provider/external-model");
+        } finally {
+            await rm(resolve(root, "outside"), {recursive: true, force: true});
+        }
+    }, 30_000);
 
     it("invoke_agent 完成后父 agent 继续进入下一轮 ReAct", async () => {
         harness.profiles.register(defineAgentProfile({

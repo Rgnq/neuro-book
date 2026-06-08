@@ -37,6 +37,7 @@ async function main() {
         await assertCleanTrackedWorktree();
     }
     await assertProductPayload();
+    await assertProductProfileArtifactsPortable();
     await assertLauncherSources();
 
     const stageRoot = join(REPO_ROOT, ".agent", "workspace", "windows-portable-package");
@@ -55,6 +56,30 @@ async function main() {
     await createZip(portableRoot, outputPath);
     await writeSha256Sums(outputPath);
     console.log(`Windows portable zip: ${relative(REPO_ROOT, outputPath).replaceAll("\\", "/")}`);
+}
+
+/**
+ * release zip 构建前确认 staged Product profile artifacts 可迁移。
+ */
+async function assertProductProfileArtifactsPortable() {
+    const compiledRoot = join(PRODUCT_ROOT, "assets", "workspace", ".nbook", "agent", "profiles", ".compiled");
+    if (!existsSync(join(compiledRoot, "manifest.json"))) {
+        throw new Error(`Product profile artifact 缺少 manifest：${join(compiledRoot, "manifest.json")}`);
+    }
+    const entries = await readdir(compiledRoot, {withFileTypes: true}).catch(() => []);
+    const offenders = [];
+    for (const entry of entries) {
+        if (!entry.isFile() || !entry.name.endsWith(".mjs")) {
+            continue;
+        }
+        const head = (await readFile(join(compiledRoot, entry.name), "utf8")).slice(0, 2048).replaceAll("\\", "/");
+        if (/__nbookCreateRequire\(["']file:\/\/\/[A-Za-z]:/u.test(head) || head.includes("D:/a/neuro-book/")) {
+            offenders.push(entry.name);
+        }
+    }
+    if (offenders.length > 0) {
+        throw new Error(`Product profile artifact 写入了构建机绝对路径：${offenders.join(", ")}`);
+    }
 }
 
 /**

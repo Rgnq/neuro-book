@@ -297,6 +297,48 @@ describe("compaction", () => {
         expect(latestCompaction?.type === "compaction" ? latestCompaction.details?.visibleTokensBefore : undefined)
             .toBe(latestCompaction?.type === "compaction" ? latestCompaction.tokensBefore : undefined);
     });
+
+    it("persisted sidecar message 作为普通 message 进入 summary 输入", async () => {
+        let summaryPrompt: Context | null = null;
+        faux.setResponses([
+            (context) => {
+                summaryPrompt = context;
+                return fauxAssistantMessage(fauxText("SIDECAR SUMMARY"));
+            },
+        ]);
+        const session = await repo.createSession({
+            profileKey: "leader.default",
+            input: {},
+            workspaceRoot: root,
+        });
+        const writeCompactionEntry = createCompactionEntryWriter(repo, session.metadata.sessionId);
+        await repo.appendEntry(session.metadata.sessionId, {
+            type: "message",
+            message: createUserMessage({text: "PERSISTED SIDECAR CONTEXT"}),
+            origin: "harness",
+        }, session.metadata.workspaceKey);
+        await repo.appendEntry(session.metadata.sessionId, {
+            type: "custom_message",
+            message: createUserMessage({text: "RUNTIME ONLY SHADOW SHOULD NOT EXIST IN SUMMARY"}),
+            visibleToModel: true,
+        }, session.metadata.workspaceKey);
+        const snapshot = await repo.readSession(session.metadata.sessionId);
+
+        await appendCompaction({
+            repo,
+            snapshot,
+            messages: repo.reduce(snapshot).messages,
+            model: faux.getModel(),
+            writeCompactionEntry,
+            compaction: {
+                reserveTokens: 2_000,
+                keepRecentTokens: 1,
+            },
+        });
+
+        expect(summaryPromptText(summaryPrompt)).toContain("PERSISTED SIDECAR CONTEXT");
+        expect(summaryPromptText(summaryPrompt)).not.toContain("RUNTIME ONLY SHADOW SHOULD NOT EXIST IN SUMMARY");
+    });
 });
 
 function createCompactionEntryWriter(repo: JsonlSessionRepository, sessionId: number): Parameters<typeof appendCompaction>[0]["writeCompactionEntry"] {

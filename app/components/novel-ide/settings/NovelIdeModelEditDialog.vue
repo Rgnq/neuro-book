@@ -188,7 +188,7 @@ function updateOpen(value: boolean): void {
                                     <label class="text-xs font-semibold text-[var(--text-secondary)]">输入能力</label>
                                     <span class="truncate text-[10px] text-[var(--text-muted)] font-medium">当前: {{ props.modelInputDisplayLabel(props.editingModel) }}</span>
                                 </div>
-                                <div class="grid grid-cols-3 gap-1 rounded-lg border border-[var(--border-color)] border-opacity-40 bg-[var(--bg-input)] bg-opacity-25 p-1">
+                                <div class="grid grid-cols-2 gap-1 rounded-lg border border-[var(--border-color)] border-opacity-40 bg-[var(--bg-input)] bg-opacity-25 p-1">
                                     <button
                                         v-for="option in props.modelInputOptions"
                                         :key="option.value"

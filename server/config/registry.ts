@@ -36,6 +36,22 @@ export const CONFIG_REGISTRY: ConfigItemMeta[] = [
         description: "模型 Provider API Key，只在设置页展示脱敏状态。",
     },
     {
+        key: "embedding",
+        scope: "global-workspace",
+        effect: "next-run",
+        merge: "deep-merge",
+        secret: false,
+        description: "RAG 使用的嵌入服务配置。Global 保存服务地址与凭证，Project 只能覆盖模型名和维度。",
+    },
+    {
+        key: "embedding.apiKey",
+        scope: "global",
+        effect: "next-run",
+        merge: "replace",
+        secret: true,
+        description: "嵌入服务 API Key，只在设置页展示脱敏状态。",
+    },
+    {
         key: "agent.defaultProfileKey",
         scope: "global-workspace",
         effect: "next-session",

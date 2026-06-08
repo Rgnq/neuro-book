@@ -15,13 +15,13 @@
 - 支持 profile 作者声明自动旁路，V1 先覆盖 `prepareRun` 和 `settleRun` 两个阶段。
 - 验证 roleplay actor 的两个首要用例：
   - `actor.context-load`：GM packet 进入 actor 主 run 前，旁路检索并整理 actor-safe 设定。
-  - `actor.memory-save`：actor 主 run 结束后，旁路维护 `knowledge.md` 与 `mind.md`。
+  - `actor.memory-save`：actor 主 run 结束后，旁路维护 `events.jsonl`、`memory.jsonl` 与 `mind.md`。
 
 ## Current State
 
 - 18 号任务已经把 `NeuroAgentHarness` 拆向 Run Kernel / Turn Transaction / runtime hooks：
   - `prepareRun` / `prepareTurn` / `ingestTurn` / `prepareNextTurn` / `settleRun` 已经是可讨论的扩展边界。
-  - `runtimeMessages` 可以注入 `RunFrame`，不写入 session history。
+  - `runtimeMessages` 可以注入 `RunFrame`，不写入 session history；sidecar V1 后续新增 `persistedMessages`，用于把旁路上下文写回父 session。
   - `ingestTurn` 可以返回 runtime-only transcript，避免污染持久对话。
 - 当前 profile 的 `allowedToolKeys` 同时承担“模型可见工具”和“执行上限”两层含义。
 - roleplay 需求要求 actor 主上下文尽量纯净：
@@ -64,7 +64,7 @@
 它适合表达这些动作：
 
 - actor 主 run 前检索并整理角色可知设定。
-- actor 主 run 后维护 `knowledge.md` 与 `mind.md`。
+- actor 主 run 后维护 `events.jsonl`、`memory.jsonl` 与 `mind.md`。
 - writer 写作前检索相关 lorebook。
 - GM 推进前让规则审计器检查状态约束。
 
@@ -136,6 +136,7 @@ type SidecarResult<TSidecarData> = {
 
 type SidecarMergePlan = {
     runtimeMessages?: AgentMessage[];
+    persistedMessages?: Message[];
     runtimeState?: JsonValue;
     writePlans?: SessionWritePlan[];
 };
@@ -194,7 +195,8 @@ type ReportResultArgs = {
 - sidecar transcript 默认 `runtime_only`。
 - sidecar 结果只通过 `merge()` 回到主线。
 - `merge()` 返回的 `runtimeMessages` 进入主 `RunFrame`，不默认落盘。
-- 如需持久化，必须显式返回 `SessionWritePlan`，或由 sidecar 自己通过允许的文件工具完成。
+- `merge()` 返回的 `persistedMessages` 写入父 session active path，`prepareRun` 阶段会同步注入本轮主 run；第一版只允许 user message，origin 标记为 `harness`。
+- `persistedMessages` V1 推荐只在 `prepareRun` 使用；`settleRun` 的持久状态维护继续优先用 `writePlans`，或由 sidecar 自己通过允许的文件工具完成。
 
 ## Roleplay V1 Use Cases
 
@@ -243,7 +245,8 @@ const actorContextLoadPass: SidecarProfilePass<ActorInput, ActorContextLoadResul
 目的：
 
 - 退出扮演模式，回顾本轮输入、actor 回复和已知文件。
-- 更新 `knowledge.md`：角色新知道、修正或遗忘的信息。
+- 追加 `events.jsonl`：角色本轮经历、观察、被告知、误解或推理出的片段。
+- 维护 `memory.jsonl`：角色对人物、地点、物品、概念或自身的稳定看法。
 - 更新 `mind.md`：角色当前想法、猜测、情绪、动机。
 - 不更新 `state.md`。位置、持有物、伤势、关系压力等状态仍由 GM / 后续变量系统裁决。
 
@@ -254,7 +257,7 @@ const actorMemorySavePass: SidecarProfilePass<ActorInput, ActorMemorySaveResult>
     name: "actor.memory-save",
     stage: "settleRun",
     allowedToolKeys: ["read", "write", "edit", "report_result"],
-    enterPrompt: (ctx) => "...退出扮演模式，更新该 actor 的 knowledge.md 与 mind.md...",
+    enterPrompt: (ctx) => "...退出扮演模式，更新该 actor 的 events.jsonl、memory.jsonl 与 mind.md...",
     sidecarDataSchema: actorMemorySaveSchema,
     merge: (ctx, result) => ({
         runtimeState: {
@@ -292,7 +295,7 @@ V1 策略：
 - sidecar 失败时父 run 失败。
 - V1 禁止 nested sidecar。
 - `actor.context-load` 通过 prompt 限制信息过滤，不做严格 projection/apply 系统。
-- `actor.memory-save` 可以自由 `write` / `edit`，但只负责 `knowledge.md` 与 `mind.md`，不负责 `state.md`。
+- `actor.memory-save` 可以维护 `events.jsonl`、`memory.jsonl` 与 `mind.md`，但不负责 `state.md`。
 - 工具禁用后的违规消息清理推迟到后续 Harness hook。
 
 ## Files Changed
@@ -332,6 +335,7 @@ V1 策略：
   - `disableSteer`：旁路不消费用户 steer。
   - `disableAutomaticCompaction`：旁路不触发自动 compaction。
 - `prepareRun` sidecar 的 `merge().runtimeMessages` 会注入父 run 的模型上下文，不落 session。
+- `prepareRun` sidecar 的 `merge().persistedMessages` 会写入父 session active path，并在本轮主 run 可见；sidecar 合并后如果 provider-visible context 超出模型窗口，父 invocation 直接失败，不依赖 compaction。
 - `settleRun` sidecar 只在父 run completed 后执行，可通过 `merge().writePlans` 写入 session custom state，或让旁路工具自己写文件。
 - sidecar 失败、进入 waiting、缺少 `sidecar_data` 且无 fallback、或 `sidecarDataSchema` 校验失败时，父 run 失败。
 - provider-visible tool schema 保持 profile 最大 `allowedToolKeys`，sidecar 的 `allowedToolKeys` 作为执行权限子集。模型仍能看到稳定工具 schema，但越权工具会返回 tool error 并允许模型同 run 修正。

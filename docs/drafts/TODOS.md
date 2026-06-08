@@ -177,7 +177,7 @@
 - [ ] 角色卡导入脚本需要持续加强自动分类能力
 - [ ] profile 模板
 - [ ] alternate_greetings 需要适配
-- [ ]
+- [ ] web_fetch 优化，反爬虫。https://www.zhihu.com/question/341189075
 - [ ]
 - [ ]
 - [ ]

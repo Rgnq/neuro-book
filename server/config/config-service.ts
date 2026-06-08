@@ -17,6 +17,7 @@ import type {
     ConfigBootstrapDto,
     ConfigDefaultProfileSettingsDto,
     ConfigEditorSnapshotDto,
+    ConfigEmbeddingSettingsDto,
     ConfigModelSettingsDto,
     ConfigSnapshotDto,
     ConfigWorkspaceQueryDto,
@@ -27,6 +28,8 @@ import {CONFIG_REGISTRY, CONFIG_VERSION} from "nbook/server/config/registry";
 import {
     normalizeAgentProfileModelConfig,
     normalizeAgentProfiles,
+    normalizeEmbeddingModelConfig,
+    normalizeEmbeddingService,
     normalizeGlobalConfig,
     normalizeProjectConfig,
     resolveEffectiveConfig,
@@ -36,6 +39,7 @@ import type {
     AgentProfileConfig,
     ConfigTarget,
     ConfiguredModelConfig,
+    EmbeddingServiceConfig,
     EffectiveConfig,
     ModelProviderOptionsConfig,
     ModelSettingsConfig,
@@ -84,6 +88,7 @@ export async function readConfigEditorSnapshot(
         effective: effective as unknown as Record<string, never>,
         meta: CONFIG_REGISTRY,
         modelSettings: buildConfigModelSettingsDto(effective),
+        embeddingSettings: buildConfigEmbeddingSettingsDto(global, project, effective),
         agentProfileSettings: buildConfigAgentProfileSettingsDto(effective, catalog.profiles.map((profile) => ({
             profileKey: profile.key,
             name: profile.name,
@@ -136,6 +141,7 @@ export async function saveGlobalConfig(input: GlobalConfigDto, query: ConfigWork
         ...(input.editor !== undefined ? {editor: input.editor} : {}),
         ...(input.web !== undefined ? {web: normalizeGlobalWebForWrite(input.web, current)} : {}),
         ...(input.models !== undefined ? {models: normalizeGlobalModelsForWrite(input.models, current)} : {}),
+        ...(input.embedding !== undefined ? {embedding: normalizeGlobalEmbeddingForWrite(input.embedding, current)} : {}),
     });
     await writeJsonFile(GLOBAL_CONFIG_PATH, next);
     return readConfigEditorSnapshot(query);
@@ -166,11 +172,18 @@ export async function loadEffectiveConfig(query: ConfigWorkspaceQueryDto = {work
 }
 
 /**
- * 按 session metadata 中的 workspaceRoot 读取 effective config。
+ * 只按 workspaceRoot 读取 effective config。
  *
- * Agent session 已经持久化 workspaceRoot，因此 invocation 不再依赖 HTTP 层继续传 projectPath。
+ * 普通 Project agent session 的 workspaceRoot 通常是容器 `workspace`，
+ * Project 覆盖必须走 loadEffectiveConfigForAgentRuntime()。
  */
 export async function loadEffectiveConfigForWorkspaceRoot(workspaceRoot: string | undefined): Promise<EffectiveConfig> {
+    const externalWorkspaceRoot = resolveExternalWorkspaceRoot(workspaceRoot);
+    if (externalWorkspaceRoot) {
+        const global = normalizeGlobalConfig(await readJsonFile<StoredGlobalConfig>(path.join(externalWorkspaceRoot, ".nbook", "config.json")));
+        return resolveEffectiveConfig(global, null);
+    }
+
     const global = await readGlobalConfigFile();
     const normalizedRoot = normalizeWorkspaceRoot(workspaceRoot);
     if (!normalizedRoot || normalizedRoot === USER_ASSETS_WORKSPACE_ROOT || normalizedRoot === WORKSPACE_CONTAINER_ROOT) {
@@ -180,6 +193,35 @@ export async function loadEffectiveConfigForWorkspaceRoot(workspaceRoot: string 
         ? path.resolve(process.cwd(), normalizedRoot, "config.json")
         : path.resolve(process.cwd(), normalizedRoot, ".nbook", "config.json");
     return resolveEffectiveConfig(global, await readProjectConfigFile(configPath));
+}
+
+/**
+ * 按 Agent runtime metadata 的 workspaceRoot + projectPath 读取 effective config。
+ */
+export async function loadEffectiveConfigForAgentRuntime(input: {workspaceRoot?: string; projectPath?: string}): Promise<EffectiveConfig> {
+    if (!input.projectPath) {
+        return loadEffectiveConfigForWorkspaceRoot(input.workspaceRoot);
+    }
+
+    if (path.isAbsolute(input.projectPath)) {
+        const [global, project] = await Promise.all([
+            readGlobalConfigFile(),
+            readProjectConfigFile(path.join(path.resolve(input.projectPath), ".nbook", "config.json")),
+        ]);
+        return resolveEffectiveConfig(global, project);
+    }
+
+    const externalWorkspaceRoot = resolveExternalWorkspaceRoot(input.workspaceRoot);
+    if (externalWorkspaceRoot) {
+        const projectSlug = extractProjectSlug(input.projectPath);
+        const [global, project] = await Promise.all([
+            normalizeGlobalConfig(await readJsonFile<StoredGlobalConfig>(path.join(externalWorkspaceRoot, ".nbook", "config.json"))),
+            readProjectConfigFile(path.join(externalWorkspaceRoot, projectSlug, ".nbook", "config.json")),
+        ]);
+        return resolveEffectiveConfig(global, project);
+    }
+
+    return loadEffectiveConfig({workspaceKind: "novel", projectPath: input.projectPath});
 }
 
 /**
@@ -298,6 +340,10 @@ function redactGlobalConfig(config: StoredGlobalConfig): GlobalConfigDto {
             },
             fetch: config.web?.fetch,
         },
+        embedding: {
+            ...config.embedding,
+            apiKey: maskSecret(config.embedding?.apiKey),
+        },
         models: {
             default: config.models?.default ?? null,
             providers: (config.models?.providers ?? []).map((provider) => ({
@@ -333,6 +379,26 @@ function buildConfigModelSettingsDto(effective: EffectiveConfig): ConfigModelSet
         defaultModelLabel: defaultModel ? buildModelLabel(defaultModel.provider.name, defaultModel.model.name) : null,
         enabledModels: listEnabledModels(effective.models),
         providers,
+    };
+}
+
+function buildConfigEmbeddingSettingsDto(
+    global: StoredGlobalConfig,
+    project: StoredProjectConfig | null,
+    effective: EffectiveConfig,
+): ConfigEmbeddingSettingsDto {
+    const globalEmbedding = normalizeEmbeddingService(global.embedding);
+    const projectEmbedding = project?.embedding ? normalizeEmbeddingModelConfig(project.embedding) : null;
+    return {
+        global: {
+            ...globalEmbedding,
+            apiKey: maskSecret(globalEmbedding.apiKey),
+        },
+        project: projectEmbedding,
+        effective: {
+            ...effective.embedding,
+            apiKey: maskSecret(effective.embedding.apiKey),
+        },
     };
 }
 
@@ -456,6 +522,26 @@ function findProviderApiKey(config: StoredGlobalConfig, providerId: string): str
     return config.models?.providers?.find((provider) => provider.id === providerId)?.options.apiKey ?? "";
 }
 
+function normalizeGlobalEmbeddingForWrite(
+    embedding: NonNullable<GlobalConfigDto["embedding"]>,
+    current: StoredGlobalConfig,
+): EmbeddingServiceConfig {
+    return normalizeEmbeddingService({
+        enabled: embedding.enabled,
+        provider: embedding.provider,
+        model: embedding.model,
+        dimensions: embedding.dimensions,
+        apiKey: resolveSecretWrite({
+            previousValue: current.embedding?.apiKey ?? "",
+            configured: embedding.apiKey?.configured ?? false,
+            value: embedding.apiKey?.value,
+        }),
+        baseURL: embedding.baseURL,
+        timeoutMs: embedding.timeoutMs,
+        requestOptions: normalizeJsonRecord(embedding.requestOptions),
+    });
+}
+
 function normalizeGlobalWebForWrite(web: NonNullable<GlobalConfigDto["web"]>, current: StoredGlobalConfig): NonNullable<StoredGlobalConfig["web"]> {
     return {
         search: {
@@ -524,6 +610,13 @@ function assertProjectConfigDoesNotContainGlobalOnly(input: ProjectConfigDto): v
             message: "Project Config 不能覆盖 models.providers",
         });
     }
+    const embedding = record.embedding as Record<string, unknown> | undefined;
+    if (embedding && ("apiKey" in embedding || "baseURL" in embedding || "provider" in embedding || "enabled" in embedding || "timeoutMs" in embedding || "requestOptions" in embedding)) {
+        throw createError({
+            statusCode: 400,
+            message: "Project Config 只能覆盖 embedding.model 和 embedding.dimensions",
+        });
+    }
 }
 
 async function readJsonFile<T>(filePath: string): Promise<T | null> {
@@ -559,4 +652,32 @@ function normalizeWorkspaceRoot(workspaceRoot: string | undefined): string | nul
         return null;
     }
     return normalized;
+}
+
+function resolveExternalWorkspaceRoot(workspaceRoot: string | undefined): string | null {
+    if (!workspaceRoot || !path.isAbsolute(workspaceRoot)) {
+        return null;
+    }
+    const absoluteRoot = path.resolve(workspaceRoot);
+    const repoWorkspaceRoot = path.resolve(process.cwd(), "workspace");
+    const relativeToRepoWorkspace = path.relative(repoWorkspaceRoot, absoluteRoot);
+    if (!relativeToRepoWorkspace || !relativeToRepoWorkspace.startsWith("..") && !path.isAbsolute(relativeToRepoWorkspace)) {
+        return null;
+    }
+    return absoluteRoot;
+}
+
+function extractProjectSlug(projectPath: string): string {
+    const normalized = projectPath.trim().replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
+    if (path.posix.isAbsolute(normalized) || normalized.includes("..")) {
+        throw createError({statusCode: 400, message: "projectPath 必须形如 workspace/<project>"});
+    }
+    const parts = normalized.split("/").filter(Boolean);
+    if (parts.length === 2 && parts[0] === "workspace") {
+        return parts[1] ?? "";
+    }
+    if (parts.length === 1 && parts[0]) {
+        return parts[0];
+    }
+    throw createError({statusCode: 400, message: "projectPath 必须形如 workspace/<project>"});
 }

@@ -1,6 +1,7 @@
 import type {JsonValue} from "nbook/server/agent/messages/types";
 import type {MarkdownEditorPreferences, MonacoEditorPreferences} from "nbook/shared/editor-workbench";
 import type {ThinkingLevelDto} from "nbook/shared/dto/app-settings.dto";
+import type {ModelInputKind} from "nbook/shared/dto/app-settings.dto";
 
 export type ConfigScope = "boot" | "global" | "global-workspace";
 export type ConfigEffect = "hot" | "next-run" | "next-session" | "restart-required";
@@ -42,7 +43,7 @@ export type ConfiguredModelConfig = {
     api: string | null;
     baseUrl: string | null;
     reasoning: boolean | null;
-    input: ("text" | "image")[] | null;
+    input: ModelInputKind[] | null;
     maxTokens: number | null;
     cost: {
         input: number;
@@ -72,6 +73,22 @@ export type ConfiguredProviderConfig = {
 export type ModelSettingsConfig = {
     defaultModelKey: string | null;
     providers: Record<string, ConfiguredProviderConfig>;
+};
+
+export type EmbeddingModelConfig = {
+    model: string | null;
+    dimensions: number | null;
+};
+
+export type EmbeddingServiceProvider = "openai-compatible";
+
+export type EmbeddingServiceConfig = EmbeddingModelConfig & {
+    enabled: boolean;
+    provider: EmbeddingServiceProvider;
+    apiKey: string;
+    baseURL: string;
+    timeoutMs: number | null;
+    requestOptions: Record<string, JsonValue>;
 };
 
 export type WebSearchProviderKey = "tavily" | "brave";
@@ -132,6 +149,7 @@ export type EffectiveConfig = {
         enabled: boolean;
     };
     models: ModelSettingsConfig;
+    embedding: EmbeddingServiceConfig;
     agent: {
         defaultProfileKey: {
             novel: string | null;
@@ -164,6 +182,7 @@ export type StoredGlobalConfig = {
         default?: string | null;
         providers?: StoredProviderConfig[];
     };
+    embedding?: Partial<EmbeddingServiceConfig>;
     agent?: {
         defaultProfileKey?: {
             novel?: string | null;
@@ -184,6 +203,7 @@ export type StoredProjectConfig = {
     models?: {
         default?: string | null;
     };
+    embedding?: Partial<EmbeddingModelConfig>;
     agent?: {
         defaultProfileKey?: string | null;
         profileModelDefaults?: StoredAgentProfileModelDefaultsConfig;

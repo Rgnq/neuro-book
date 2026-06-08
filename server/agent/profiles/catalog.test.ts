@@ -1,5 +1,5 @@
 import {randomUUID} from "node:crypto";
-import {copyFile, mkdir, readFile, rm, writeFile} from "node:fs/promises";
+import {copyFile, mkdir, readFile, readdir, rm, symlink, writeFile} from "node:fs/promises";
 import {dirname, join, relative, resolve} from "node:path";
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
 import {Type} from "typebox";
@@ -443,6 +443,20 @@ describe("AgentProfileCatalog", () => {
         }));
     });
 
+    it("单文件编译失败时不会把 building artifact 留在真实 compiled root", async () => {
+        await writeProfile(systemRoot, "custom.safe.profile.tsx", profileSource("custom.safe", "Safe"));
+        await compileRoot(systemRoot);
+        const manifestPath = join(systemRoot, ".compiled", "manifest.json");
+        const previousManifest = await readFile(manifestPath, "utf8");
+
+        await writeProfile(systemRoot, "custom.bad.profile.tsx", "export default null;");
+        await expect(compileRoot(systemRoot, "custom.bad.profile.tsx")).rejects.toThrow("compiled profile");
+
+        const compiledEntries = await readdir(join(systemRoot, ".compiled"));
+        expect(compiledEntries.some((entry) => entry.includes(".building."))).toBe(false);
+        await expect(readFile(manifestPath, "utf8")).resolves.toBe(previousManifest);
+    });
+
     it("skipFresh 会在 type artifact 缺失时重新编译 profile", async () => {
         await writeProfile(systemRoot, "custom.typed.profile.tsx", profileSource("custom.typed", "Typed"));
         const first = await compileProfileArtifacts({profileRoot: systemRoot});
@@ -476,6 +490,84 @@ describe("AgentProfileCatalog", () => {
 
         expect(userItem.dependencies.some((dependency) => dependency.path.endsWith("workspace/.nbook/agent/profiles/builtin/custom.synced.profile.tsx"))).toBe(true);
         await expect(validateProfileArtifact(userRoot, userItem)).resolves.toEqual({fresh: true});
+    });
+
+    it("Product profile artifact 不写入构建机绝对 require 路径", async () => {
+        const productRoot = join(root, "product");
+        systemRoot = join(productRoot, "assets", "workspace", ".nbook", "agent", "profiles");
+        userRoot = join(productRoot, "workspace", ".nbook", "agent", "profiles");
+        await mkdir(join(productRoot, ".output", "server"), {recursive: true});
+        await writeFile(join(productRoot, "release-meta.json"), "{}\n", "utf8");
+        await writeFile(join(productRoot, "tsconfig.json"), "{}\n", "utf8");
+        await writeFile(join(productRoot, ".output", "server", "index.mjs"), "", "utf8");
+        await writeProfile(systemRoot, "custom.product.profile.mjs", `
+            export default {
+                manifest: { key: "custom.product", name: "Product" },
+                inputSchema: { type: "object", properties: {} },
+                outputSchema: { type: "object", properties: {} },
+                allowedToolKeys: [],
+                prepare() { return { systemPrompt: "ok" }; },
+            };
+        `);
+
+        const previousCwd = process.cwd();
+        process.chdir(productRoot);
+        try {
+            await compileProfileArtifacts({
+                profileRoot: systemRoot,
+                rootLabel: "assets/workspace/.nbook/agent/profiles",
+            });
+        } finally {
+            process.chdir(previousCwd);
+        }
+
+        const artifact = await readFile(join(systemRoot, ".compiled", "custom.product.mjs"), "utf8");
+        expect(artifact.slice(0, 2048)).toContain("__nbookResolveProductRequireRoot");
+        expect(artifact.slice(0, 2048)).not.toMatch(/file:\/\/\/[A-Za-z]:/u);
+        expect(artifact).not.toContain("D:/a/neuro-book/");
+    });
+
+    it("Product 用户层 artifact 经过 portable workspace junction 后仍从 app vendor 解析 require", async () => {
+        const portableRoot = join(root, "portable");
+        const productRoot = join(portableRoot, "app");
+        const dataWorkspaceRoot = join(portableRoot, "data", "workspace");
+        systemRoot = join(productRoot, "assets", "workspace", ".nbook", "agent", "profiles");
+        userRoot = join(productRoot, "workspace", ".nbook", "agent", "profiles");
+        await mkdir(join(productRoot, ".output", "server", "node_modules", "@nbook", "portable-marker"), {recursive: true});
+        await mkdir(dataWorkspaceRoot, {recursive: true});
+        await symlink(dataWorkspaceRoot, join(productRoot, "workspace"), process.platform === "win32" ? "junction" : "dir");
+        await writeFile(join(productRoot, "release-meta.json"), "{}\n", "utf8");
+        await writeFile(join(productRoot, "tsconfig.json"), "{}\n", "utf8");
+        await writeFile(join(productRoot, ".output", "server", "index.mjs"), "", "utf8");
+        await writeFile(join(productRoot, ".output", "server", "node_modules", "@nbook", "portable-marker", "index.js"), `module.exports = {marker: "portable-vendor"};\n`, "utf8");
+        await writeProfile(userRoot, "custom.portable.profile.mjs", `
+            export default {
+                manifest: { key: "custom.portable", name: "Portable" },
+                inputSchema: { type: "object", properties: {} },
+                outputSchema: { type: "object", properties: {} },
+                allowedToolKeys: [],
+                prepare() {
+                    const marker = require("@nbook/" + "portable-marker");
+                    return { systemPrompt: marker.marker };
+                },
+            };
+        `);
+
+        const previousCwd = process.cwd();
+        process.chdir(productRoot);
+        try {
+            await compileProfileArtifacts({
+                profileRoot: userRoot,
+                rootLabel: "workspace/.nbook/agent/profiles",
+            });
+            const catalog = new AgentProfileCatalog(systemRoot, userRoot);
+            const profile = await catalog.get("custom.portable");
+            expect(await profile.prepare!(context())).toEqual(expect.objectContaining({
+                systemPrompt: "portable-vendor",
+            }));
+        } finally {
+            process.chdir(previousCwd);
+        }
     });
 });
 

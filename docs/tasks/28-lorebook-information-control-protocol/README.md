@@ -37,7 +37,7 @@
 - `simulation/runs/` 用于运行过程和 Tick 产物。
 - `roleplay/` 不再作为目标目录；旧 Project Workspace 需要手动迁移或后续迁移工具。
 - 基础建模模式采用 `Prototype / Instance + Event Sourcing + Subject-facing View`：lorebook 记录原型和规则，entity 只在需要状态追踪时实例化，events 记录来源流水，knowledge / subject-facing state 控制主体可见信息。
-- 引用路径不是可见性授权；subject state 可以引用 lorebook prototype 或 entity，但 subject 能知道什么只由 `events.md`、`knowledge.md`、subject-facing `state.md` 和 simulator 过滤输入决定。
+- 引用路径不是可见性授权；subject state 可以引用 lorebook prototype 或 entity，但 subject 能知道什么只由 `events.jsonl`、`memory.jsonl`、subject-facing `state.md` 和 simulator 过滤输入决定。
 - 普通、无差异、无隐藏状态的物品不实例化；出现独立状态、隐藏真相、唯一性、持有人差异、进度、损坏或剧情重要性时才建立 entity。
 - `.nbook/` 定位为系统、运行时、模板和配置资产，不保存作品正文设定。
 - 第一版只收敛目录层、内容类型层、subject 信息控制层和 entity 状态层；信息控制 frontmatter、正文分区和 GraphRAG 边后续再设计。

@@ -9,6 +9,7 @@ type ModelOverrideInput = Partial<AgentProfileModelConfig> & {
 };
 
 type PiModelInput = Model<any>["input"][number];
+type ConfigModelInput = "text" | "image";
 type ResolvedPiModel = Model<any> & {
     /**
      * 本地 Global Config provider 实例 ID。允许同一个 Pi provider 添加多份连接时，
@@ -67,7 +68,7 @@ export function resolvePiModelFromConfig(
             provider: piProviderId,
             baseUrl: provider.options.baseURL || model.baseUrl || "",
             reasoning: model.reasoning ?? false,
-            input: [...(model.input ?? ["text"])],
+            input: normalizePiModelInput(model.input),
             cost: customCost,
             contextWindow: model.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW,
             maxTokens: model.maxTokens ?? DEFAULT_MAX_TOKENS,
@@ -80,7 +81,7 @@ export function resolvePiModelFromConfig(
         providerConfigId: providerId,
         baseUrl: provider.options.baseURL || model.baseUrl || piModel?.baseUrl || "",
         reasoning: model.reasoning ?? piModel?.reasoning ?? false,
-        input: [...(model.input ?? piModel?.input ?? ["text"])],
+        input: normalizePiModelInput(model.input ?? piModel?.input ?? ["text"]),
         cost: {
             input: model.cost?.input ?? piModel?.cost.input ?? 0,
             output: model.cost?.output ?? piModel?.cost.output ?? 0,
@@ -137,6 +138,11 @@ export function resolvePiApiKey(providerId: string): string | undefined {
  */
 export function resolvePiModelInputs(providerId: string, modelId: string): PiModelInput[] {
     return [...(resolvePiRegistryModel(providerId, modelId)?.input ?? ["text"])];
+}
+
+function normalizePiModelInput(input: ConfigModelInput[] | PiModelInput[] | null | undefined): PiModelInput[] {
+    const values = [...new Set((input ?? ["text"]).filter((item): item is PiModelInput => item === "text" || item === "image"))];
+    return values.length > 0 ? values : ["text"];
 }
 
 function resolvePiRegistryModel(providerId: string, modelId: string): Model<any> | undefined {

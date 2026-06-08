@@ -122,6 +122,7 @@
     "redis": "^5.10.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "sqlite-vec": "^0.1.9",
     "superjson": "^2.2.6",
     "swagger-ui-express": "^5.0.1",
     "the-new-css-reset": "^1.11.3",

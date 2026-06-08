@@ -2,7 +2,7 @@
 import {spawn} from "node:child_process";
 import {randomBytes} from "node:crypto";
 import {existsSync} from "node:fs";
-import {cp, mkdir, readFile, rm, writeFile} from "node:fs/promises";
+import {cp, mkdir, readFile, readdir, rm, writeFile} from "node:fs/promises";
 import {dirname, join, relative, resolve} from "node:path";
 import {createRequire} from "node:module";
 import {fileURLToPath, pathToFileURL} from "node:url";
@@ -52,8 +52,35 @@ async function stageProduct() {
     await copyNbookRuntimePackage();
     await prepareProductSystemAssets();
     await assertProductTsxVendor();
+    await assertProductSqliteVecVendor();
+    await assertProductProfileArtifactsPortable();
 
     console.log(`Product runtime staged: ${relative(REPO_ROOT, PRODUCT_ROOT).replaceAll("\\", "/")}`);
+}
+
+/**
+ * 确认 Product profile artifacts 不把构建机绝对路径写进 runtime require。
+ */
+async function assertProductProfileArtifactsPortable() {
+    const compiledRoot = resolve(PRODUCT_ROOT, "assets", "workspace", ".nbook", "agent", "profiles", ".compiled");
+    if (!existsSync(resolve(compiledRoot, "manifest.json"))) {
+        throw new Error(`Product profile artifact 缺少 manifest：${resolve(compiledRoot, "manifest.json")}`);
+    }
+    const entries = await readdir(compiledRoot, {withFileTypes: true}).catch(() => []);
+    const offenders = [];
+    for (const entry of entries) {
+        if (!entry.isFile() || !entry.name.endsWith(".mjs")) {
+            continue;
+        }
+        const filePath = resolve(compiledRoot, entry.name);
+        const head = (await readFile(filePath, "utf8")).slice(0, 2048).replaceAll("\\", "/");
+        if (/__nbookCreateRequire\(["']file:\/\/\/[A-Za-z]:/u.test(head) || head.includes("D:/a/neuro-book/")) {
+            offenders.push(entry.name);
+        }
+    }
+    if (offenders.length > 0) {
+        throw new Error(`Product profile artifact 写入了构建机绝对路径：${offenders.join(", ")}`);
+    }
 }
 
 /**
@@ -306,6 +333,28 @@ async function assertProductTsxVendor() {
     const api = await import(pathToFileURL(resolvedApi).href);
     if (typeof api.tsImport !== "function") {
         throw new Error("Product runtime tsx vendor 缺少 tsImport，请确认 .output/server/node_modules/tsx 完整复制。");
+    }
+}
+
+/**
+ * 确认 Subject RAG 依赖的 sqlite-vec JS 包与本机 native optional 包都在产品 vendor 内。
+ */
+async function assertProductSqliteVecVendor() {
+    const requireFromProductOutput = createRequire(pathToFileURL(resolve(PRODUCT_ROOT, ".output", "server", "index.mjs")));
+    const resolvedApi = requireFromProductOutput.resolve("sqlite-vec");
+    const normalizedApi = resolvedApi.replaceAll("\\", "/");
+    if (!normalizedApi.includes("/.output/server/node_modules/sqlite-vec/")) {
+        throw new Error(`Product runtime sqlite-vec vendor 解析错误：${resolvedApi}`);
+    }
+    const sqliteVec = await import(pathToFileURL(resolvedApi).href);
+    if (typeof sqliteVec.load !== "function" || typeof sqliteVec.getLoadablePath !== "function") {
+        throw new Error("Product runtime sqlite-vec vendor 缺少 load()。");
+    }
+    const loadablePath = sqliteVec.getLoadablePath();
+    const normalizedLoadablePath = loadablePath.replaceAll("\\", "/");
+    const normalizedNodeModules = resolve(PRODUCT_ROOT, ".output", "server", "node_modules").replaceAll("\\", "/");
+    if (!normalizedLoadablePath.startsWith(`${normalizedNodeModules}/`) || !existsSync(loadablePath)) {
+        throw new Error(`Product runtime sqlite-vec native 扩展解析错误：${loadablePath}`);
     }
 }
 

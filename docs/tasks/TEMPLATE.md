@@ -2,7 +2,9 @@
 
 > Active task directory format: `NN-kebab-case-name/`. Archived tasks move to `docs/tasks/archived/<task-slug>/`.
 
-## User Request
+## Relative documents refs
+
+## User Request / Topic
 
 - 
 
@@ -40,21 +42,18 @@ A stronger version gives Codex a fuller operating contract:
 
 - 
 
-## Walkthrough
+## Decisions / Discussion
 
-- 
+-
 
-## Decisions
 
-- 
+## Verification / Test
 
-## Files Changed
+-
 
-- 
+## Implementation Walkthrough
 
-## Verification
-
-- 
+-
 
 ## TODO / Follow-ups
 

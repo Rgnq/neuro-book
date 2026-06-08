@@ -26,6 +26,7 @@ const runtimePackageSeeds = [
     "h3",
     "picocolors",
     "sisteransi",
+    "sqlite-vec",
     "typebox",
     "tsx",
     "typescript",

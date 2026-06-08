@@ -36,6 +36,16 @@
             }
         ]
     },
+    "embedding": {
+        "enabled": false,
+        "provider": "openai-compatible",
+        "model": null,
+        "dimensions": null,
+        "apiKey": "",
+        "baseURL": "",
+        "timeoutMs": 30000,
+        "requestOptions": {}
+    },
     "agent": {
         "defaultProfileKey": {
             "novel": "leader.default",

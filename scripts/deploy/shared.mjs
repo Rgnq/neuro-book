@@ -367,8 +367,8 @@ export async function writeDeployFiles(config, mode) {
             }
             const scripts = mode.renderStartScript(config);
             if (scripts) {
-                p.log.info(`Dry run file: ${scripts.startPath}`);
-                p.log.info(`Dry run file: ${scripts.adminPath}`);
+                p.log.info(`Dry run file: ${resolve(config.deployDir, scripts.startPath)}`);
+                p.log.info(`Dry run file: ${resolve(config.deployDir, scripts.adminPath)}`);
             }
             for (const scriptPath of staleNativeScriptPaths) {
                 if (existsSync(scriptPath)) {
@@ -432,14 +432,18 @@ export async function writeDeployFiles(config, mode) {
         }
         const scripts = mode.renderStartScript(config);
         if (scripts) {
-            await writeFile(scripts.startPath, scripts.startContent, 'utf-8');
-            await writeFile(scripts.adminPath, scripts.adminContent, 'utf-8');
+            const startPath = resolve(config.deployDir, scripts.startPath);
+            const adminPath = resolve(config.deployDir, scripts.adminPath);
+            await mkdir(dirname(startPath), {recursive: true});
+            await mkdir(dirname(adminPath), {recursive: true});
+            await writeFile(startPath, scripts.startContent, 'utf-8');
+            await writeFile(adminPath, scripts.adminContent, 'utf-8');
             if (process.platform !== 'win32') {
-                await chmod(scripts.startPath, 0o700);
-                await chmod(scripts.adminPath, 0o700);
+                await chmod(startPath, 0o700);
+                await chmod(adminPath, 0o700);
             }
-            p.log.success(`Wrote ${scripts.startPath}`);
-            p.log.success(`Wrote ${scripts.adminPath}`);
+            p.log.success(`Wrote ${startPath}`);
+            p.log.success(`Wrote ${adminPath}`);
         }
     } else {
         const composeContent = mode.renderCompose(config);

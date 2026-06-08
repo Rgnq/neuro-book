@@ -31,7 +31,7 @@ inventory:
     subjectVisibleName: 血药
 ```
 
-`entity` 引用不代表玩家角色知道隐藏真相；玩家角色知道什么仍看 `events.md` 与 `knowledge.md`。
+`entity` 引用不代表玩家角色知道隐藏真相；玩家角色知道什么仍看 `events.jsonl` 与 `memory.jsonl`。
 
 ## 身体与姿态
 

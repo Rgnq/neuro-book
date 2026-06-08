@@ -113,7 +113,7 @@ function normalizeLegacyModels(input: unknown): ConfiguredModelConfig[] {
             api: typeof model.api === "string" ? model.api : null,
             baseUrl: typeof model.baseUrl === "string" ? model.baseUrl : null,
             reasoning: typeof model.reasoning === "boolean" ? model.reasoning : null,
-            input: Array.isArray(model.input) ? model.input.filter((item): item is "text" | "image" => item === "text" || item === "image") : null,
+            input: Array.isArray(model.input) ? model.input.filter((item): item is NonNullable<ConfiguredModelConfig["input"]>[number] => item === "text" || item === "image") : null,
             maxTokens: typeof model.maxTokens === "number" ? model.maxTokens : null,
             cost: isRecord(model.cost)
                 ? {

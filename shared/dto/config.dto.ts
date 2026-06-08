@@ -20,6 +20,12 @@ const JsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([
 
 const ConfigPathTextSchema = z.string().trim().min(1);
 const NullableModelKeySchema = z.string().trim().min(1).nullable().default(null);
+const EmbeddingDimensionsSchema = z.number().int().positive().nullable().default(null);
+const EmbeddingProviderSchema = z.enum(["openai-compatible"]);
+const EmbeddingModelSchema = z.string().trim().nullable().optional().transform((value) => {
+    const normalized = value?.trim() ?? "";
+    return normalized ? normalized : null;
+});
 const ProviderIdSchema = z.string().trim().min(1).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u);
 const NullableTextSchema = z.string().trim().nullable().optional().transform((value) => {
     const normalized = value?.trim() ?? "";
@@ -88,6 +94,28 @@ export const ConfigModelSettingsDtoSchema = z.object({
     defaultModelLabel: z.string().trim().nullable().default(null),
     enabledModels: z.array(EnabledModelOptionDtoSchema).default([]),
     providers: z.array(ConfiguredProviderConfigDtoSchema).default([]),
+});
+
+export const EmbeddingServiceConfigDtoSchema = z.object({
+    enabled: z.boolean().default(false),
+    provider: EmbeddingProviderSchema.default("openai-compatible"),
+    model: EmbeddingModelSchema,
+    dimensions: EmbeddingDimensionsSchema,
+    apiKey: SecretConfigValueDtoSchema,
+    baseURL: ProviderOptionTextSchema,
+    timeoutMs: ProviderTimeoutMsSchema,
+    requestOptions: ProviderRequestOptionsSchema,
+});
+
+export const EmbeddingProjectConfigDtoSchema = z.object({
+    model: EmbeddingModelSchema,
+    dimensions: EmbeddingDimensionsSchema,
+}).partial().default({});
+
+export const ConfigEmbeddingSettingsDtoSchema = z.object({
+    global: EmbeddingServiceConfigDtoSchema,
+    project: EmbeddingProjectConfigDtoSchema.nullable(),
+    effective: EmbeddingServiceConfigDtoSchema,
 });
 
 export const ConfigAgentProfileSettingsDtoSchema = z.object({
@@ -191,6 +219,7 @@ export const GlobalConfigDtoSchema = z.object({
         default: NullableModelKeySchema,
         providers: z.array(ConfiguredProviderConfigDtoSchema).default([]),
     }).default({default: null, providers: []}),
+    embedding: EmbeddingServiceConfigDtoSchema.partial().default({}),
     agent: z.object({
         defaultProfileKey: z.object({
             novel: ProfileKeySchema.nullable().default(null),
@@ -211,6 +240,7 @@ export const ProjectConfigDtoSchema = z.object({
     models: z.object({
         default: NullableModelKeySchema,
     }).partial().optional(),
+    embedding: EmbeddingProjectConfigDtoSchema.optional(),
     agent: z.object({
         defaultProfileKey: ProfileKeySchema.nullable().optional(),
         profileModelDefaults: AgentProfileModelConfigDtoSchema.partial().optional(),
@@ -233,6 +263,7 @@ export const ConfigEditorSnapshotDtoSchema = z.object({
     effective: z.record(z.string(), JsonValueSchema),
     meta: z.array(ConfigItemMetaDtoSchema),
     modelSettings: ConfigModelSettingsDtoSchema,
+    embeddingSettings: ConfigEmbeddingSettingsDtoSchema,
     agentProfileSettings: ConfigAgentProfileSettingsDtoSchema,
     defaultProfileSettings: ConfigDefaultProfileSettingsDtoSchema,
 });
@@ -241,6 +272,9 @@ export type SecretConfigValueDto = z.infer<typeof SecretConfigValueDtoSchema>;
 export type ConfigItemMetaDto = z.infer<typeof ConfigItemMetaDtoSchema>;
 export type ConfigWorkspaceQueryDto = z.infer<typeof ConfigWorkspaceQueryDtoSchema>;
 export type ConfigModelSettingsDto = z.infer<typeof ConfigModelSettingsDtoSchema>;
+export type EmbeddingServiceConfigDto = z.infer<typeof EmbeddingServiceConfigDtoSchema>;
+export type EmbeddingProjectConfigDto = z.infer<typeof EmbeddingProjectConfigDtoSchema>;
+export type ConfigEmbeddingSettingsDto = z.infer<typeof ConfigEmbeddingSettingsDtoSchema>;
 export type ConfigAgentProfileSettingsDto = z.infer<typeof ConfigAgentProfileSettingsDtoSchema>;
 export type ConfigDefaultProfileSettingsDto = z.infer<typeof ConfigDefaultProfileSettingsDtoSchema>;
 export type WebConfigDto = z.infer<typeof WebConfigDtoSchema>;

@@ -153,6 +153,7 @@ export type SidecarResult<TSidecarData = JsonValue> = {
 
 export type SidecarMergePlan = {
     runtimeMessages?: AgentMessage[];
+    persistedMessages?: Message[];
     runtimeState?: JsonValue;
     writePlans?: SessionWritePlan[];
 };
