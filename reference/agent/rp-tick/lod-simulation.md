@@ -94,3 +94,40 @@ rp.leader 从 LOD 中挑选用户化身能感知的事件，用**用户视角的
    近郊农田出现异常的[土元素虫群](lorebook/creature/earth-elemental-swarm)，
    已经毁了三块麦田，佣金 15G。
 ```
+
+## Pending Events：写入 current.md
+
+上面 LOD 事件类型中的"即将进入场景的事件"（如女仆莉丝两分钟后到达），以及当前尚未兑现的伏笔，必须写入 `current.md` 的 `## Pending Events` 段，防止跨 tick 遗忘。
+
+Pending Events 是 [simulation.md](../../content/simulation.md) 中 current.md "pending next steps" 概念的结构化形式，不是新增的第二套机制——用它承载所有"已经生成、等待在后续 tick 兑现"的世界事件。
+
+```markdown
+## Pending Events
+
+- [约 2 分钟后 / Tick 004 前后] 女仆莉丝端着热茶到达仪式大厅侧门（来源：Tick 002 LOD1）
+- [未定] 金谷城冒险者公会的土元素虫群委托，可能与召唤魔力波动有关（来源：Tick 002 LOD2，伏笔）
+```
+
+每轮读取 current.md 时检查 Pending Events：
+
+- **到期**：纳入本轮 LOD0 / 场景事件，并从 Pending Events 删除
+- **未到期**：保留
+- **已失效**（剧情走向使其不再可能发生）：删除，必要时在裁决报告"预告"段说明
+
+裁决报告的"预告"段与 Pending Events 口径一致：预告是给 rp.leader 看的可读版，Pending Events 是写回 current.md 的持久版。
+
+## `<knowledge>` 与角色记忆文件的去重
+
+`<knowledge>`（见 [actor-facing-packet.md](actor-facing-packet.md)）是**新信息注入**通道；mind.md / memory.jsonl 是**信息存储**。组装 packet 做信息控制检查时：
+
+- 只注入"本轮场景需要、且角色长期记忆（subject.md / mind.md / memory.jsonl）尚未覆盖"的知识。判断依据是读取到的 subject 文件内容。
+- 角色记忆已覆盖的知识不要重复注入——sidecar 会自动加载。
+- 角色通过 `<knowledge>` 第一次接触的知识，是否沉淀为长期记忆由 actor 的 memory-save sidecar 决定，simulator.leader 不直接写 subject 记忆文件。
+
+## LOD 事件数量的动态调整
+
+上面层级表中的数量是**基准值**，按当前剧情密度调整：
+
+- **剧情密度高**（多角色冲突、重要裁决多、场景本身信息量大）→ 降低 LOD 事件数。LOD0 可以只给 2–3 个，避免世界噪声淹没主线。
+- **剧情密度低**（赶路、休整、独处、等待）→ 提高 LOD 事件数。让世界的自主运行感填充叙事空间。
+- LOD 的目的是补足世界真实感，不是固定配额。每轮先判断"这个场景缺多少世界细节"，再决定生成多少。

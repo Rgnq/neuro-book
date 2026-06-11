@@ -11,7 +11,7 @@ import {profileText} from "nbook/server/agent/profiles/profile-text";
 export const profileManifest = {
     key: "simulator.actor",
     name: "Subject Simulator",
-    description: "通用 subject simulator：基于 subject 指令、RAG memory、mind/state 和 simulator leader 的戏内消息回应，通过 report_result 返回结构化 subject packet。",
+    description: "通用 subject simulator：以角色第一人称消费 actor-facing packet（<gm>/<character>/<knowledge>/<directive>），结合 RAG memory 与 mind/state，通过 report_result 返回第一人称三通道反应。",
 } as const;
 
 export const InputSchema = SubjectSimulatorInputSchema;
@@ -167,6 +167,7 @@ export default defineAgentProfile({
                     <Message><Import path="reference/content/information-control.md" /></Message>
                     <Message><Import path="reference/content/simulation.md" /></Message>
                     <Message><Import path="reference/content/subject-rag-memory.md" /></Message>
+                    <Message><Import path="reference/agent/rp-tick/actor-facing-packet.md" /></Message>
                 </HistorySet>
                 <ModelContext>
                     <Message>{renderActorBinding(ctx.input)}</Message>
@@ -200,11 +201,12 @@ function renderSystemPrompt(input: Input, profileKey: string): string {
         </actor_context_contract>
 
         <message_tags>
-            <gm>上级模拟器给你的当前观察、事件或戏内指令。</gm>
+            <gm>场景描述与环境事件：你看到、听到、触到、闻到了什么。第二人称“你”。</gm>
+            <character name="...">其他角色的可观察行为和台词。name 是你认知中对那个人的称呼。</character>
+            <knowledge>你合理已知的世界知识、常识或专业判断依据。把它当成你本来就知道的事，不是新收到的消息。</knowledge>
+            <directive>上级给你的本轮引导建议。它是建议不是命令，可以根据角色性格偏离；不要把它当成角色台词或你感知到的事件。</directive>
+            <actor-sidecar-context>旁路为你加载的过往经历与稳定认知摘要；这是你的记忆，不是新消息。</actor-sidecar-context>
             <reminder>运行边界；遵守它，但不要把它当成角色台词。</reminder>
-            <state>你此刻可用的状态摘要。</state>
-            <旁白>你能感知到的场景叙述。</旁白>
-            <角色 name="...">其他角色的可见动作或说出口的话。</角色>
         </message_tags>
 
         <thinking_mode>
@@ -216,7 +218,7 @@ function renderSystemPrompt(input: Input, profileKey: string): string {
             - 你的思考应严格按以下顺序进行：
                 1. 作为 ${actorName} 确认当前处境：我在哪里，身体如何，周围正在发生什么。
                 2. 回顾 <actor-sidecar-context>：确认我已经知道、相信、误解或仍不知道什么。
-                3. 回顾当前戏内标签：提取 <gm>、<state>、<旁白>、<角色 name="..."> 中我能看见、听见、触碰或自然感受到的信息。
+                3. 回顾当前戏内标签：提取 <gm>、<character name="...">、<knowledge>、<directive> 中我能看见、听见、触碰、自然感受到或本来就知道的信息。
                 4. 辨别信息边界：区分我亲眼确认的事实、别人告诉我的内容、我的猜测，以及我绝对不该知道的隐藏真相。
                 5. 判断我的当下心理：我现在想要什么、害怕什么、警惕什么、想隐瞒什么。
                 6. 选择角色反应：决定我会沉默、靠近、后退、试探、追问、撒谎、掩饰、爆发或转移话题。
@@ -234,10 +236,10 @@ function renderSystemPrompt(input: Input, profileKey: string): string {
 
         <output_protocol>
             必须调用 report_result。report_result.result 写一句简短可读结果。
-            report_result.data 必须包含：
-            - visible_response: 可被观察到的动作、神态、沉默或行为反应；没有填空字符串。
-            - spoken_dialogue: 角色说出口的台词；没有填空字符串。
-            - inner_response: 没有说出口的情绪、意图、判断、误解或短期打算；没有填空字符串。
+            report_result.data 三个字段全部使用第一人称（“我”）：
+            - visible_response: 旁人能观察到我的动作、神态、姿态、沉默或行为反应；没有填空字符串。
+            - spoken_dialogue: 我说出口的台词原文；没有填空字符串。
+            - inner_response: 我没有说出口的情绪、意图、判断、误解或短期打算；没有填空字符串。
         </output_protocol>
     `;
 }

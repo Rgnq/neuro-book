@@ -88,9 +88,9 @@ export const SubjectSimulatorInputSchema = Type.Object({
  * simulator.actor 通过 report_result.data 返回的结构化角色反应。
  */
 export const SubjectSimulatorOutputSchema = Type.Object({
-    visible_response: Type.String({description: "角色在场景中可被观察到的动作、神态、姿态、沉默或行为反应；没有则填空字符串。"}),
-    spoken_dialogue: Type.String({description: "角色明确说出口的台词；没有则填空字符串。"}),
-    inner_response: Type.String({description: "角色没有直接说出口的情绪、意图、判断、误解或短期打算；没有则填空字符串。"}),
+    visible_response: Type.String({description: "第一人称：旁人能观察到我的动作、神态、姿态、沉默或行为反应；没有则填空字符串。"}),
+    spoken_dialogue: Type.String({description: "第一人称：我说出口的台词原文；没有则填空字符串。"}),
+    inner_response: Type.String({description: "第一人称：我没有说出口的情绪、意图、判断、误解或短期打算；没有则填空字符串。"}),
 });
 
 /**

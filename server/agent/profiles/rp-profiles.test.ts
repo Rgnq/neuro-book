@@ -129,7 +129,7 @@ describe("RP builtin profiles", () => {
         expect(systemPrompt).toContain("第 1 步：解读用户行动");
         expect(systemPrompt).toContain("第 2 步：世界模拟");
         expect(systemPrompt).toContain("准备 Writer Brief");
-        expect(systemPrompt).toContain("你是创意导演");
+        expect(systemPrompt).toContain("你是编剧");
         expect(systemPrompt).toContain("不把 meta 讨论或引导建议静默写成 canon");
         expect(systemPrompt).toContain("rp.leader 是当前唯一 canonical RP 主持名称");
         expect(systemPrompt).toContain("直接用 assistant 文本返回");
@@ -299,7 +299,10 @@ describe("RP builtin profiles", () => {
             expect(systemPrompt).toContain("我只表达角色反应本身");
             expect(systemPrompt).toContain("必须调用 report_result");
             expect(systemPrompt).toContain("<gm>");
-            expect(systemPrompt).toContain("<角色 name=\"...\">");
+            expect(systemPrompt).toContain("<character name=\"...\">");
+            expect(systemPrompt).toContain("<knowledge>");
+            expect(systemPrompt).toContain("<directive>");
+            expect(systemPrompt).toContain("<actor-sidecar-context>");
             expect(systemPrompt).not.toContain("knowledge.md 使用二级章节归类");
             expect(systemPrompt).not.toContain("not_known_to_you");
             expect(systemPrompt).not.toContain("必要时可更新");

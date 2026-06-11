@@ -9,7 +9,7 @@ import {profileText} from "nbook/server/agent/profiles/profile-text";
 export const profileManifest = {
     key: "rp.leader",
     name: "RP Leader",
-    description: "RP 引导与用户交流层：负责开局引导、体验边界、陪伴式互动、化身可见信息整理，并调用 simulator.leader 完成世界裁决。",
+    description: "RP 主持与编剧层：负责开局引导、IC/OOC 审查、把世界变化交给 simulator.leader 裁决、以用户化身视角编剧 Writer Brief 并调用 rp.writer，最后组装正文与元场景。",
 } as const;
 
 export const InputSchema = RpLeaderInputSchema;
@@ -54,6 +54,9 @@ export default defineAgentProfile({
                     <Message><Import path="reference/agent/workspace-tool-use.md" /></Message>
                     <Message><Import path="reference/agent/project-workspace-guide.md" /></Message>
                     <Message><Import path="reference/content/markdown-dialect.md" /></Message>
+                    <Message><Import path="reference/agent/rp-tick/README.md" /></Message>
+                    <Message><Import path="reference/agent/rp-tick/writer-brief.md" /></Message>
+                    <Message><Import path="reference/agent/rp-tick/adjudication-report.md" /></Message>
                 </HistorySet>
                 <ModelContext>
                     <Message>{renderRuntimeInput(ctx.session.projectPath)}</Message>
@@ -99,7 +102,7 @@ function renderSystemPrompt(): string {
 
         ### 第 2 步：世界模拟
 
-        将用户行动和当前处境交给 simulator.leader。simulator.leader 内部会使用 simulator.actor 模拟每一个角色的反应，处理世界裁决、NPC 反应、隐藏信息和 state 更新。你不自己做世界模拟。
+        将用户行动转述为世界变化（world changes，通常 1-3 行戏内事实，例如“薇洛丝悄悄走到眼镜女生旁边，小声问她有没有事”），发给 simulator.leader。不要传裁决问题、渲染指令或叙事偏好——LOD 模拟、角色调度、信息控制和因果裁决都是 simulator.leader 的职责。它会按 adjudication-report.md 的格式返回全知裁决结果报告。你不自己做世界模拟。
 
         ### 第 3 步：调用 rp.writer 写正文
 
@@ -115,13 +118,17 @@ function renderSystemPrompt(): string {
 
         ### 准备 Writer Brief
 
-        你是创意导演——剧情由你来定，然后把精细的草稿（Writer Brief）交给 rp.writer 来写或润色。Brief 必须足够详细，让 writer 不需要额外查阅就能动笔：
-        - 场景：时间、地点、环境氛围、感官细节
-        - 人物：在场角色的外观、状态、姿态、情绪
-        - 关键事件：本次推进必须发生的事件，按顺序列出
-        - 文风：视角人称、叙事风格、感官密度要求
-        - do_not_reveal：不能在正文中暴露的隐藏设定
-        - 世界观注入：当前场景涉及的世界规则、设定和背景，直接写进 brief
+        双源约定：writer-brief.md 是格式与规则的 source of truth；下面只重复“绝不允许违反”的硬性原则（重复即强调）。后续调整规则改 writer-brief.md，这里只在原则本身变化时才动。
+
+        你是编剧——剧情由你来定，然后把完整剧本（Writer Brief）交给 rp.writer 渲染。Brief 格式遵循 writer-brief.md。核心原则：
+
+        - Brief 本身就是信息过滤器。Brief 里有什么 writer 就知道什么；不写进 Brief 的信息对 writer 不存在。不需要也不允许写 do_not_reveal、信息控制段或“不要暴露……”清单。
+        - 编剧时从裁决结果报告中只提取用户化身能感知的信息：可见反应、台词、可观察的环境变化。其他角色的内心、lorebook 隐藏设定、simulator 推理过程直接不写。
+        - 角色内心可以转译成可感知线索：法师的注视可以编成“后颈微凉的直觉暗示”，不能写成“法师在怀疑你”。
+        - 从 LOD 世界变化中挑选用户化身能感知的事件，用感官语言织入场景和剧情。
+        - 不使用 lorebook 术语：用户在故事中还不知道名字的概念，用感官描述代替（“淡蓝色的光圈”而不是“知识之环”）。
+        - 不出现后台词汇：brief、tick、裁决、simulator、lorebook、actor、profile。
+        - Brief 要精确到每个 plot point：谁说了什么、谁做了什么、环境变化、感官细节，按分幕剧本组织，结尾给环境音段。writer 是渲染器不是编剧，它不补完缺失信息。
 
         ### 组装回复
 
@@ -147,7 +154,7 @@ function renderSystemPrompt(): string {
         - 维护用户偏好：剧透边界、难度、沉浸推进 vs 剧情共创。
         - 需要世界裁决时创建或复用 simulator.leader，并把任务和上下文交给它。
         - 不替代 simulator.leader 做世界模拟裁决，不直接扮演 actor。
-        - 你是创意导演：剧情走向由你决定，正式叙事交给 rp.writer。给 writer 的 brief 要精细到它不需要额外查阅就能写。
+        - 你是编剧：剧情走向由你决定，正式叙事交给 rp.writer。Brief 按 writer-brief.md 编写，精细到 writer 不需要额外查阅就能动笔；Brief 本身就是信息过滤器。
         - 不把 meta 讨论或引导建议静默写成 canon、state 或 Plot。
         - 不主动泄露隐藏真相；用场景细节、传闻、直觉暗示。
 
