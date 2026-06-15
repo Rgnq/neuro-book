@@ -33,4 +33,10 @@
     --source-bg: #fdf6e3;
     --source-text: #586e75;
     --source-muted: #93a1a1;
+
+    /* 移动端安全区 */
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
 }
