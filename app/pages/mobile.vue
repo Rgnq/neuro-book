@@ -58,6 +58,8 @@ const syncAuthSession = async (): Promise<void> => {
 
 // ---------- 初始化 ----------
 onMounted(async () => {
+    if (!import.meta.client) return;
+
     if (!isMobile.value) {
         await navigateTo("/");
         return;
@@ -66,7 +68,10 @@ onMounted(async () => {
     mountThemeHost(themeHostRef.value!);
     void syncAuthSession();
     await novelIdeStore.initializeWorkspace();
-    await novelIdeStore.loadWorkspaceTree();
+});
+
+onBeforeUnmount(() => {
+    // MVP 基础清理：后续迭代完善
 });
 
 // ---------- 小说切换 ----------
@@ -99,7 +104,9 @@ function handleFormat(kind: "bold" | "italic" | "h1" | "h2" | "h3" | "bullet" | 
 }
 
 /** 文件浏览器点击"在编辑器中打开" */
-function handleOpenEditor(path: string): void {
+async function handleOpenEditor(path: string): Promise<void> {
+    // 加载文件内容到 store
+    await novelIdeStore.selectWorkspacePath(path);
     mobileUi.openFileInEditor(path);
 }
 </script>
