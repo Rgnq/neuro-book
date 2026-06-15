@@ -26,9 +26,9 @@ const emit = defineEmits<{
 /** Session 下拉选项 — 由 sessions prop 转换 */
 const sessionItems = computed<DropdownItem[]>(() => {
     return props.sessions.map((s) => ({
-        label: s.title || `Session #${s.id}`,
-        value: String(s.id),
-        active: s.id === props.activeSessionId,
+        label: s.title || `Session #${s.sessionId}`,
+        value: String(s.sessionId),
+        active: s.sessionId === props.activeSessionId,
     }));
 });
 </script>
