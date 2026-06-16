@@ -27,6 +27,7 @@ const {
     novels,
     selectedFileContent,
     selectedFilePath,
+    savingFile,
     theme,
 } = storeToRefs(novelIdeStore);
 
@@ -65,6 +66,9 @@ const syncAuthSession = async (): Promise<void> => {
         currentUser.value = null;
     }
 };
+
+// 页面标题
+useHead({ title: "Neuro Book" });
 
 // ---------- 初始化 ----------
 onMounted(async () => {
@@ -127,6 +131,21 @@ async function handleOpenEditor(path: string): Promise<void> {
     await novelIdeStore.selectWorkspacePath(path);
     mobileUi.openFileInEditor(path);
 }
+
+/** 保存当前编辑的文件 */
+async function handleSaveFile(): Promise<void> {
+    try {
+        await novelIdeStore.saveCurrentFile();
+    } catch {
+        // 错误由 store 内部的 write conflict 机制处理
+    }
+}
+
+/** 关闭当前编辑的文件（保留缓冲区在 store 中） */
+function handleCloseFile(): void {
+    novelIdeStore.clearActiveFile();
+    mobileUi.editorFilePath = null;
+}
 </script>
 
 <template>
@@ -161,6 +180,34 @@ async function handleOpenEditor(path: string): Promise<void> {
             <!-- 编辑 Tab -->
             <div v-show="mobileUi.activeTab === 'editor'" class="flex h-full flex-col">
                 <MobileEditorToolbar @format="handleFormat" />
+                <!-- 文件信息 + 保存/关闭 -->
+                <div
+                    v-if="selectedFilePath"
+                    class="flex shrink-0 items-center gap-2 border-b border-[var(--border-color)] bg-[var(--bg-panel)] px-3 py-1.5"
+                >
+                    <span class="i-lucide-file-text h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
+                    <span class="min-w-0 flex-1 truncate text-[12px] text-[var(--text-secondary)]">
+                        {{ selectedFilePath.split("/").pop() }}
+                    </span>
+                    <button
+                        type="button"
+                        class="flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-[12px] font-medium text-[var(--accent-main)] transition-colors active:bg-[var(--bg-hover)] disabled:opacity-40"
+                        :disabled="savingFile"
+                        @click="handleSaveFile"
+                    >
+                        <span v-if="savingFile" class="i-lucide-loader-2 h-3.5 w-3.5 animate-spin" />
+                        <span v-else class="i-lucide-save h-3.5 w-3.5" />
+                        <span>{{ savingFile ? "保存中" : "保存" }}</span>
+                    </button>
+                    <button
+                        type="button"
+                        class="flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-[12px] font-medium text-[var(--text-muted)] transition-colors active:bg-[var(--bg-hover)]"
+                        @click="handleCloseFile"
+                    >
+                        <span class="i-lucide-x h-3.5 w-3.5" />
+                        <span>关闭</span>
+                    </button>
+                </div>
                 <div class="flex-1 overflow-hidden">
                     <div v-if="!selectedFilePath" class="flex h-full items-center justify-center text-[var(--text-muted)] text-[13px]">
                         从「文件」标签页选择文件开始编辑

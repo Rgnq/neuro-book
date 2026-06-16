@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- 背景圆角矩形 -->
+  <rect width="512" height="512" rx="112" fill="#1a1a2e"/>
+  <!-- 书脊 -->
+  <rect x="240" y="100" width="32" height="312" rx="4" fill="#6c5b4b"/>
+  <!-- 左页 -->
+  <path d="M240 120 C200 108 120 112 120 160 L120 360 C120 380 200 384 240 372 Z" fill="#f4ecd8"/>
+  <!-- 右页 -->
+  <path d="M272 120 C312 108 392 112 392 160 L392 360 C392 380 312 384 272 372 Z" fill="#fdf6e3"/>
+  <!-- 左页文字线 -->
+  <line x1="145" y1="190" x2="220" y2="185" stroke="#c5b898" stroke-width="5" stroke-linecap="round"/>
+  <line x1="145" y1="215" x2="215" y2="211" stroke="#c5b898" stroke-width="5" stroke-linecap="round"/>
+  <line x1="145" y1="240" x2="225" y2="236" stroke="#c5b898" stroke-width="5" stroke-linecap="round"/>
+  <line x1="145" y1="265" x2="210" y2="262" stroke="#c5b898" stroke-width="5" stroke-linecap="round"/>
+  <!-- 右页文字线 -->
+  <line x1="295" y1="185" x2="370" y2="190" stroke="#c5b898" stroke-width="5" stroke-linecap="round"/>
+  <line x1="295" y1="211" x2="365" y2="215" stroke="#c5b898" stroke-width="5" stroke-linecap="round"/>
+  <line x1="295" y1="236" x2="375" y2="240" stroke="#c5b898" stroke-width="5" stroke-linecap="round"/>
+  <!-- 强调色点缀 -->
+  <circle cx="392" cy="160" r="16" fill="#d97743" opacity="0.85"/>
+</svg>
