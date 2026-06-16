@@ -130,10 +130,10 @@ export function useStoryReader() {
             // 优先使用 frontmatter.title，其次 tick 自身的 title，最后回退到 slug
             title.value = frontmatter.title || tick.title || tick.id;
 
-            // renderMarkdown 基于 Marked v17，原生透传 HTML 标签，
-            // Markdown + HTML 混排无需额外检测，统一交由 marked 处理
+            // normalizeMultilineHtml 将跨行 HTML 压缩为单行，
+            // 确保 Marked 能正确识别内联 HTML 块
             const trimmed = body.trim();
-            proseHtml.value = trimmed ? renderMarkdown(trimmed) : "";
+            proseHtml.value = trimmed ? renderMarkdown(normalizeMultilineHtml(trimmed)) : "";
 
             // 更新 store 状态
             mobileUi.currentTickId = tickId;
@@ -195,6 +195,19 @@ export function useStoryReader() {
         goNext,
         init,
     };
+}
+
+/**
+ * 将跨行 HTML 标签压缩为单行，使 Marked 能正确识别。
+ * 例如 `<div style="\n  color: red;\n">` → `<div style=" color: red; ">`
+ */
+function normalizeMultilineHtml(html: string): string {
+    // 匹配 <tag ... > 形式的跨行标签（贪婪匹配属性直到最近的 >）
+    return html.replace(/<(\w+)([^>]*?)>/gs, (_full, tag, attrs) => {
+        // 将属性内的换行和多余空白压缩
+        const compact = attrs.replace(/\s+/g, " ").trim();
+        return `<${tag}${compact ? ` ${compact}` : ""}>`;
+    });
 }
 
 /**
