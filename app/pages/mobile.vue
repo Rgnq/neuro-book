@@ -132,7 +132,7 @@ async function handleOpenEditor(path: string): Promise<void> {
 <template>
     <!-- 移动端页面根容器 -->
     <div
-        v-if="isMobile"
+        v-show="isMobile"
         ref="themeHostRef"
         class="novel-ide-theme mobile-ide-page flex h-[100dvh] flex-col overflow-hidden bg-[var(--bg-main)] text-[var(--text-main)] transition-colors duration-300"
     >
@@ -220,7 +220,7 @@ async function handleOpenEditor(path: string): Promise<void> {
     </div>
 
     <!-- 非移动端占位 -->
-    <div v-else class="flex h-screen items-center justify-center bg-[var(--bg-main)] text-[var(--text-muted)] text-[14px]">
+    <div v-show="!isMobile" class="flex h-screen items-center justify-center bg-[var(--bg-main)] text-[var(--text-muted)] text-[14px]">
         请在移动设备上访问此页面
     </div>
 </template>

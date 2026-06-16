@@ -28,6 +28,7 @@ const {
     theme,
     viewMode,
     promptExpanded,
+    selectedReasoning,
     markdownEditorPreferences,
     monacoEditorPreferences,
 } = storeToRefs(novelIdeStore);
@@ -93,6 +94,37 @@ function close(): void {
     emit("update:modelValue", false);
 }
 
+// ---- 版本信息 ----
+type AppVersionKind = "release" | "tag" | "commit" | "package";
+interface AppVersionDto { versionLabel: string; versionKind: AppVersionKind; githubUrl: string; }
+
+const appVersion = ref<AppVersionDto | null>(null);
+const appVersionPending = ref(false);
+
+const versionLabel = computed(() => {
+    if (appVersionPending.value && !appVersion.value) return "读取版本中";
+    if (!appVersion.value) return "版本信息不可用";
+    if (appVersion.value.versionKind === "commit") return `Commit ${appVersion.value.versionLabel}`;
+    if (appVersion.value.versionKind === "release") return `Release ${appVersion.value.versionLabel}`;
+    return `版本 ${appVersion.value.versionLabel}`;
+});
+
+async function fetchVersion(): Promise<void> {
+    if (appVersion.value || appVersionPending.value) return;
+    appVersionPending.value = true;
+    try {
+        appVersion.value = await $fetch<AppVersionDto>("/api/app/version");
+    } catch {
+        appVersion.value = null;
+    } finally {
+        appVersionPending.value = false;
+    }
+}
+
+watch(() => props.modelValue, (open) => {
+    if (open) fetchVersion();
+});
+
 // ---- frontend inline ----
 const themeOptions: SelectOption[] = [
     { value: "sepia", label: "Sepia" },
@@ -118,16 +150,16 @@ const promptExpandedOptions: SelectOption[] = [
 const promptExpandedValue = computed({
     get: (): string => promptExpanded.value ? "expanded" : "collapsed",
     set: (value: string): void => {
-        promptExpanded.value = value === "expanded";
+        novelIdeStore.promptExpanded = value === "expanded";
     },
 });
 
 function updateTheme(value: string): void {
-    theme.value = value as typeof theme.value;
+    novelIdeStore.theme = value as typeof novelIdeStore.theme;
 }
 
 function updateViewMode(value: string): void {
-    viewMode.value = value as typeof viewMode.value;
+    novelIdeStore.viewMode = value as typeof novelIdeStore.viewMode;
 }
 
 // ---- editor inline ----
@@ -215,6 +247,25 @@ const monacoFontOptions: SelectOption[] = [
                         <span class="i-lucide-chevron-right h-4 w-4 shrink-0 text-[var(--text-muted)]"></span>
                     </button>
                 </div>
+
+                <!-- 底部版本信息 -->
+                <div class="mt-4 px-4 pb-4">
+                    <div class="flex items-center justify-between gap-3 rounded-xl border border-[var(--border-color)]/60 bg-[var(--bg-input)]/15 px-3.5 py-3">
+                        <div class="min-w-0">
+                            <div class="truncate text-[11px] font-medium text-[var(--text-secondary)]">{{ versionLabel }}</div>
+                            <div class="mt-0.5 text-[10px] text-[var(--text-muted)]">Neuro Book</div>
+                        </div>
+                        <a
+                            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border-color)]/60 text-[var(--text-secondary)] active:bg-[var(--bg-hover)] active:text-[var(--text-main)]"
+                            :href="appVersion?.githubUrl || 'https://github.com/notnotype/neuro-book'"
+                            target="_blank"
+                            rel="noreferrer"
+                            title="GitHub"
+                        >
+                            <span class="i-lucide-github h-4 w-4"></span>
+                        </a>
+                    </div>
+                </div>
             </div>
 
             <!-- 子面板 -->
@@ -224,6 +275,15 @@ const monacoFontOptions: SelectOption[] = [
                     <div class="flex items-center justify-between rounded-lg border border-[var(--border-color)] px-3 py-2.5">
                         <span class="text-[12px] text-[var(--text-main)]">IDE 主题</span>
                         <FormSelect :model-value="theme" :options="themeOptions" class="w-32" @update:model-value="updateTheme" />
+                    </div>
+                    <div class="flex items-center justify-between rounded-lg border border-[var(--border-color)] px-3 py-2.5">
+                        <span class="text-[12px] text-[var(--text-main)]">推理强度</span>
+                        <FormSelect
+                            :model-value="selectedReasoning"
+                            :options="novelIdeStore.reasoningOptions.map((item: string) => ({ value: item, label: item }))"
+                            class="w-32"
+                            @update:model-value="novelIdeStore.selectedReasoning = $event"
+                        />
                     </div>
                     <div class="flex items-center justify-between rounded-lg border border-[var(--border-color)] px-3 py-2.5">
                         <span class="text-[12px] text-[var(--text-main)]">默认视图</span>
