@@ -10,6 +10,7 @@ defineProps<{
 const emit = defineEmits<{
     (e: "open-novels"): void;
     (e: "open-sessions"): void;
+    (e: "open-settings"): void;
 }>();
 </script>
 
@@ -41,6 +42,14 @@ const emit = defineEmits<{
                 {{ hasActiveSession ? "会话" : "新对话" }}
             </span>
             <span class="i-lucide-chevron-down h-3 w-3 shrink-0 text-[var(--text-muted)]"></span>
+        </button>
+
+        <!-- 设置齿轮 -->
+        <button
+            class="flex items-center justify-center rounded-md p-1 shrink-0 transition-colors active:bg-[var(--bg-hover)]"
+            @click="emit('open-settings')"
+        >
+            <span class="i-lucide-settings h-4 w-4 text-[var(--text-muted)]"></span>
         </button>
     </header>
 </template>
