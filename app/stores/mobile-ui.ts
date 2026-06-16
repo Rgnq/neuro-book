@@ -11,20 +11,12 @@ export const useMobileUiStore = defineStore("mobile-ui", () => {
     /** 当前激活的底部标签 */
     const activeTab = ref<MobileTab>("chat");
 
-    /** 文件浏览器中当前展开预览的文件路径，null 表示未展开 */
-    const previewFilePath = ref<string | null>(null);
-
     /** 编辑器当前打开的文件路径 */
     const editorFilePath = ref<string | null>(null);
 
     /** 切换底部标签 */
     function setActiveTab(tab: MobileTab): void {
         activeTab.value = tab;
-    }
-
-    /** 设置文件预览路径 */
-    function setPreviewFilePath(path: string | null): void {
-        previewFilePath.value = path;
     }
 
     /** 在编辑器标签中打开文件 */
@@ -35,10 +27,8 @@ export const useMobileUiStore = defineStore("mobile-ui", () => {
 
     return {
         activeTab,
-        previewFilePath,
         editorFilePath,
         setActiveTab,
-        setPreviewFilePath,
         openFileInEditor,
     };
 });

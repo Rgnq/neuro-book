@@ -6,7 +6,6 @@ import {
     buildWorkspaceFileTree,
     isWorkspaceContentDirectoryNode,
     isWorkspaceContentScopePath,
-    isWorkspaceLorebookEntry,
     isWorkspaceLorebookScopePath,
     resolveWorkspaceNodeRepresentedPath,
     type WorkspaceTreeNode,
