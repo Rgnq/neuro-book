@@ -2,7 +2,12 @@
 <script setup lang="ts">
 import { useNovelIdeStore, type WorkspaceFileNode } from "nbook/app/stores/novel-ide";
 import { storeToRefs } from "pinia";
-import { buildWorkspaceFileTree, type WorkspaceTreeNode } from "nbook/app/components/novel-ide/workspace/workspace-file-tree";
+import {
+    buildWorkspaceFileTree,
+    isWorkspaceContentDirectoryNode,
+    resolveWorkspaceNodeRepresentedPath,
+    type WorkspaceTreeNode,
+} from "nbook/app/components/novel-ide/workspace/workspace-file-tree";
 
 const emit = defineEmits<{
     (e: "open-editor", path: string): void;
@@ -30,7 +35,10 @@ const visibleNodes = computed<{ node: WorkspaceTreeNode; depth: number }[]>(() =
     function walk(nodes: WorkspaceTreeNode[], depth: number): void {
         for (const node of nodes) {
             result.push({ node, depth });
-            if (node.isDirectory && node.children.length > 0 && expandedDirs.value.has(node.path)) {
+            // 展开子节点的条件：目录有子节点 且 (用户手动展开 或 是内容目录自动展开)
+            const shouldExpand = node.isDirectory && node.children.length > 0
+                && (expandedDirs.value.has(node.path) || isWorkspaceContentDirectoryNode(node));
+            if (shouldExpand) {
                 walk(node.children, depth + 1);
             }
         }
@@ -51,13 +59,22 @@ function toggleDir(path: string): void {
     expandedDirs.value = next;
 }
 
-/** 点击节点：目录展开/折叠，文件展开/收起预览 */
+/**
+ * 判断节点是否可打开编辑/预览。
+ * 内容目录（如 lorebook 条目）虽有 isDirectory 但实际由 index.md 承载内容，应视为文件。
+ */
+function isContentNode(node: WorkspaceFileNode): boolean {
+    return !node.isDirectory || isWorkspaceContentDirectoryNode(node);
+}
+
+/** 点击节点：普通目录展开/折叠，文件/内容目录展开预览 */
 function selectNode(node: WorkspaceFileNode): void {
-    if (node.isDirectory) {
+    if (node.isDirectory && !isWorkspaceContentDirectoryNode(node)) {
         toggleDir(node.path);
         return;
     }
-    previewPath.value = previewPath.value === node.path ? null : node.path;
+    const representedPath = resolveWorkspaceNodeRepresentedPath(node);
+    previewPath.value = previewPath.value === representedPath ? null : representedPath;
 }
 
 /** 在编辑器中打开文件 */
@@ -67,6 +84,9 @@ function openInEditor(path: string): void {
 
 /** 节点图标 */
 function nodeIcon(node: WorkspaceTreeNode): string {
+    if (isWorkspaceContentDirectoryNode(node)) {
+        return "i-lucide-file-text";
+    }
     if (node.isDirectory) {
         return expandedDirs.value.has(node.path) ? "i-lucide-folder-open" : "i-lucide-folder";
     }
@@ -111,16 +131,17 @@ function nodeLabel(node: WorkspaceTreeNode): string {
                     <!-- 名称 -->
                     <span class="min-w-0 flex-1 truncate py-2.5 pr-3">{{ nodeLabel(node) }}</span>
 
-                    <!-- 字数（仅文件） -->
-                    <span v-if="!node.isDirectory && node.words" class="shrink-0 text-[10px] text-[var(--text-muted)] pr-2">
+                    <!-- 字数（文件或内容目录） -->
+                    <span v-if="isContentNode(node) && node.words" class="shrink-0 text-[10px] text-[var(--text-muted)] pr-2">
                         {{ node.words }} 字
                     </span>
 
-                    <!-- 展开子目录指示器 -->
+                    <!-- 展开子目录指示器（独立点击，不触发行选中） -->
                     <span
                         v-if="node.isDirectory && node.children.length > 0"
                         class="i-lucide-chevron-right h-3 w-3 shrink-0 text-[var(--text-muted)] mr-2 transition-transform duration-150"
                         :class="expandedDirs.has(node.path) ? 'rotate-90' : ''"
+                        @click.stop="toggleDir(node.path)"
                     ></span>
                 </div>
             </template>
