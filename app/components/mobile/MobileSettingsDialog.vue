@@ -182,7 +182,9 @@ const monacoFontOptions: SelectOption[] = [
 <template>
     <Dialog
         :model-value="props.modelValue"
-        size="mobile-fullscreen"
+        width="100vw"
+        height="100vh"
+        max-height="100vh"
         :show-footer="false"
         :show-header="false"
         @update:model-value="close()"

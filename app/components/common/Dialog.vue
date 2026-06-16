@@ -9,7 +9,7 @@ import {computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch} fr
  * 样式通过 CSS custom properties 继承项目主题。
  */
 
-type DialogSize = "sm" | "default" | "md" | "lg" | "xl" | "full" | "mobile-fullscreen";
+type DialogSize = "sm" | "default" | "md" | "lg" | "xl" | "full";
 
 type DialogSizePreset = {
     width: string;
@@ -47,11 +47,6 @@ const DIALOG_SIZE_PRESETS: Record<DialogSize, DialogSizePreset> = {
         width: "min(1840px, calc(100vw - 24px))",
         height: "min(1080px, calc(100vh - 24px))",
         maxHeight: "calc(100vh - 24px)",
-    },
-    "mobile-fullscreen": {
-        width: "100vw",
-        height: "100vh",
-        maxHeight: "100vh",
     },
 };
 

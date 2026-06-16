@@ -196,7 +196,9 @@ async function handleOpenEditor(path: string): Promise<void> {
         <Dialog
             v-model="novelDialogOpen"
             title="选择小说"
-            size="mobile-fullscreen"
+            width="100vw"
+            height="100vh"
+            max-height="100vh"
             :show-footer="false"
         >
             <div class="flex flex-col gap-0.5">
