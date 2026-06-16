@@ -11,11 +11,10 @@ import MobileEditorToolbar from "nbook/app/components/mobile/MobileEditorToolbar
 import MobileFileBrowser from "nbook/app/components/mobile/MobileFileBrowser.vue";
 import AgentChatSurface from "nbook/app/components/novel-ide/agent/AgentChatSurface.vue";
 import TipTapMarkdownEditor from "nbook/app/components/markdown-studio/TipTapMarkdownEditor.vue";
-import Dialog from "nbook/app/components/common/Dialog.vue";
 import type { MarkdownFormatCommand, MarkdownStudioEditorHandle } from "nbook/app/composables/useMarkdownStudioController";
-import type { DropdownItem } from "nbook/app/components/common/dropdown.types";
 import type { AuthSessionDto } from "nbook/shared/dto/auth.dto";
 import MobileSettingsDialog from "nbook/app/components/mobile/MobileSettingsDialog.vue";
+import NovelBookshelfDialog from "nbook/app/components/novel-ide/NovelBookshelfDialog.vue";
 
 const novelIdeStore = useNovelIdeStore();
 const mobileUi = useMobileUiStore();
@@ -24,7 +23,6 @@ const { isMobile } = useMobileDetect();
 const {
     currentNovelId,
     currentNovel,
-    novels,
     selectedFileContent,
     selectedFilePath,
     savingFile,
@@ -88,20 +86,8 @@ onBeforeUnmount(() => {
     // MVP 基础清理：后续迭代完善
 });
 
-// ---------- 小说切换 ----------
-const novelItems = computed<DropdownItem[]>(() =>
-    novels.value.map((novel) => ({
-        label: novel.title,
-        value: novel.id,
-        active: novel.id === currentNovelId.value,
-    }))
-);
-
+// ---------- 小说信息 ----------
 const novelTitle = computed(() => currentNovel.value?.title ?? "");
-
-async function handleSwitchNovel(novelId: string): Promise<void> {
-    await novelIdeStore.switchNovel(novelId);
-}
 
 // ---------- Header 按钮 ----------
 /** 打开小说选择弹窗 */
@@ -239,30 +225,8 @@ function handleCloseFile(): void {
             @select="mobileUi.setActiveTab"
         />
 
-        <!-- 小说选择弹窗 -->
-        <Dialog
-            v-model="novelDialogOpen"
-            title="选择小说"
-            width="100vw"
-            height="100vh"
-            max-height="100vh"
-            :show-footer="false"
-        >
-            <div class="flex flex-col gap-0.5">
-                <button
-                    v-for="item in novelItems"
-                    :key="item.value"
-                    type="button"
-                    class="flex items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13px] transition-colors active:bg-[var(--bg-hover)]"
-                    :class="item.active ? 'text-[var(--accent-main)] font-medium' : 'text-[var(--text-main)]'"
-                    @click="handleSwitchNovel(item.value); novelDialogOpen = false"
-                >
-                    <span class="i-lucide-book-open h-4 w-4 shrink-0 text-[var(--text-muted)]"></span>
-                    <span class="min-w-0 truncate font-serif italic">{{ item.label }}</span>
-                    <span v-if="item.active" class="i-lucide-check h-4 w-4 shrink-0 ml-auto text-[var(--accent-main)]"></span>
-                </button>
-            </div>
-        </Dialog>
+        <!-- 书架弹窗（复用桌面端 NovelBookshelfDialog：创建/删除/切换） -->
+        <NovelBookshelfDialog v-model="novelDialogOpen" />
 
         <!-- 设置弹窗 -->
         <MobileSettingsDialog v-model="settingsDialogOpen" />
