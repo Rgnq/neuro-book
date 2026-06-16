@@ -188,30 +188,30 @@ async function handleOpenEditor(path: string): Promise<void> {
             :active-tab="mobileUi.activeTab"
             @select="mobileUi.setActiveTab"
         />
-    </div>
 
-    <!-- 小说选择弹窗 -->
-    <Dialog
-        v-model="novelDialogOpen"
-        title="选择小说"
-        size="mobile-fullscreen"
-        :show-footer="false"
-    >
-        <div class="flex flex-col gap-0.5">
-            <button
-                v-for="item in novelItems"
-                :key="item.value"
-                type="button"
-                class="flex items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13px] transition-colors active:bg-[var(--bg-hover)]"
-                :class="item.active ? 'text-[var(--accent-main)] font-medium' : 'text-[var(--text-main)]'"
-                @click="handleSwitchNovel(item.value); novelDialogOpen = false"
-            >
-                <span class="i-lucide-book-open h-4 w-4 shrink-0 text-[var(--text-muted)]"></span>
-                <span class="min-w-0 truncate font-serif italic">{{ item.label }}</span>
-                <span v-if="item.active" class="i-lucide-check h-4 w-4 shrink-0 ml-auto text-[var(--accent-main)]"></span>
-            </button>
-        </div>
-    </Dialog>
+        <!-- 小说选择弹窗 -->
+        <Dialog
+            v-model="novelDialogOpen"
+            title="选择小说"
+            size="mobile-fullscreen"
+            :show-footer="false"
+        >
+            <div class="flex flex-col gap-0.5">
+                <button
+                    v-for="item in novelItems"
+                    :key="item.value"
+                    type="button"
+                    class="flex items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13px] transition-colors active:bg-[var(--bg-hover)]"
+                    :class="item.active ? 'text-[var(--accent-main)] font-medium' : 'text-[var(--text-main)]'"
+                    @click="handleSwitchNovel(item.value); novelDialogOpen = false"
+                >
+                    <span class="i-lucide-book-open h-4 w-4 shrink-0 text-[var(--text-muted)]"></span>
+                    <span class="min-w-0 truncate font-serif italic">{{ item.label }}</span>
+                    <span v-if="item.active" class="i-lucide-check h-4 w-4 shrink-0 ml-auto text-[var(--accent-main)]"></span>
+                </button>
+            </div>
+        </Dialog>
+    </div>
 
     <!-- 非移动端占位 -->
     <div v-else class="flex h-screen items-center justify-center bg-[var(--bg-main)] text-[var(--text-muted)] text-[14px]">
