@@ -82,10 +82,6 @@ onMounted(async () => {
     await novelIdeStore.initializeWorkspace();
 });
 
-onBeforeUnmount(() => {
-    // MVP 基础清理：后续迭代完善
-});
-
 // ---------- 小说信息 ----------
 const novelTitle = computed(() => currentNovel.value?.title ?? "");
 
