@@ -151,39 +151,37 @@ async function handleOpenEditor(path: string): Promise<void> {
             @create-session="handleCreateSession"
         />
 
-        <!-- Tab 内容区 — KeepAlive 保持各 Tab 状态 -->
+        <!-- Tab 内容区 — v-show 保持各 Tab 挂载不销毁 -->
         <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <KeepAlive>
-                <!-- 聊天 Tab -->
-                <div v-if="mobileUi.activeTab === 'chat'" key="chat" class="flex h-full flex-col">
-                    <AgentChatSurface
-                        ref="agentSurfaceRef"
-                        :active="true"
-                        layout="mobile"
-                        :novel-id="currentNovelId"
-                        :selected-file-path="selectedFilePath"
-                    />
-                </div>
+            <!-- 聊天 Tab -->
+            <div v-show="mobileUi.activeTab === 'chat'" class="flex h-full flex-col">
+                <AgentChatSurface
+                    ref="agentSurfaceRef"
+                    :active="true"
+                    layout="mobile"
+                    :novel-id="currentNovelId"
+                    :selected-file-path="selectedFilePath"
+                />
+            </div>
 
-                <!-- 编辑 Tab -->
-                <div v-else-if="mobileUi.activeTab === 'editor'" key="editor" class="flex h-full flex-col">
-                    <MobileEditorToolbar @format="handleFormat" />
-                    <div class="flex-1 overflow-y-auto px-4 py-3">
-                        <div v-if="!selectedFilePath" class="flex h-full items-center justify-center text-[var(--text-muted)] text-[13px]">
-                            从「文件」标签页选择文件开始编辑
-                        </div>
-                        <div v-else class="h-full">
-                            <!-- MVP: 使用 pre 纯文本显示选中文件内容 -->
-                            <pre class="whitespace-pre-wrap font-mono text-[12px] leading-relaxed">{{ selectedFileContent }}</pre>
-                        </div>
+            <!-- 编辑 Tab -->
+            <div v-show="mobileUi.activeTab === 'editor'" class="flex h-full flex-col">
+                <MobileEditorToolbar @format="handleFormat" />
+                <div class="flex-1 overflow-y-auto px-4 py-3">
+                    <div v-if="!selectedFilePath" class="flex h-full items-center justify-center text-[var(--text-muted)] text-[13px]">
+                        从「文件」标签页选择文件开始编辑
+                    </div>
+                    <div v-else class="h-full">
+                        <!-- MVP: 使用 pre 纯文本显示选中文件内容 -->
+                        <pre class="whitespace-pre-wrap font-mono text-[12px] leading-relaxed">{{ selectedFileContent }}</pre>
                     </div>
                 </div>
+            </div>
 
-                <!-- 文件 Tab -->
-                <div v-else-if="mobileUi.activeTab === 'files'" key="files" class="flex h-full flex-col">
-                    <MobileFileBrowser @open-editor="handleOpenEditor" />
-                </div>
-            </KeepAlive>
+            <!-- 文件 Tab -->
+            <div v-show="mobileUi.activeTab === 'files'" class="flex h-full flex-col">
+                <MobileFileBrowser @open-editor="handleOpenEditor" />
+            </div>
         </div>
 
         <!-- 底部标签栏 -->
