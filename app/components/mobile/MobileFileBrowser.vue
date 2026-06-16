@@ -67,14 +67,21 @@ function isContentNode(node: WorkspaceFileNode): boolean {
     return !node.isDirectory || isWorkspaceContentDirectoryNode(node);
 }
 
-/** 点击节点：普通目录展开/折叠，文件/内容目录展开预览 */
+/** 点击节点正文区：内容目录/文件 → 预览；普通目录 → 展开/折叠 */
 function selectNode(node: WorkspaceFileNode): void {
-    if (node.isDirectory && !isWorkspaceContentDirectoryNode(node)) {
-        toggleDir(node.path);
+    if (node.isDirectory) {
+        if (isWorkspaceContentDirectoryNode(node)) {
+            // 内容目录：展示预览
+            const representedPath = resolveWorkspaceNodeRepresentedPath(node);
+            previewPath.value = previewPath.value === representedPath ? null : representedPath;
+        } else {
+            // 普通目录：展开/折叠
+            toggleDir(node.path);
+        }
         return;
     }
-    const representedPath = resolveWorkspaceNodeRepresentedPath(node);
-    previewPath.value = previewPath.value === representedPath ? null : representedPath;
+    // 普通文件：展示预览
+    previewPath.value = previewPath.value === node.path ? null : node.path;
 }
 
 /** 在编辑器中打开文件 */
@@ -117,32 +124,31 @@ function nodeLabel(node: WorkspaceTreeNode): string {
                 <div
                     v-for="{ node, depth } in visibleNodes"
                     :key="node.path"
-                    class="flex items-center gap-2 border-b border-[var(--border-color)]/50 text-[13px] transition-colors active:bg-[var(--bg-hover)]"
-                    :class="previewPath === node.path ? 'bg-[var(--accent-bg)]' : ''"
+                    class="flex items-center gap-2 border-b border-[var(--border-color)]/50 text-[13px] transition-colors"
+                    :class="previewPath === resolveWorkspaceNodeRepresentedPath(node) ? 'bg-[var(--accent-bg)]' : ''"
                     :style="{ paddingLeft: `${8 + depth * 16}px` }"
-                    @click="selectNode(node)"
                 >
-                    <!-- 展开/折叠指示器 + 图标 -->
+                    <!-- 图标区：目录可点击展开/折叠 -->
                     <span
-                        :class="nodeIcon(node)"
-                        class="h-4 w-4 shrink-0 text-[var(--text-muted)]"
-                    ></span>
+                        v-if="node.isDirectory && node.children.length > 0"
+                        class="flex items-center gap-0.5 shrink-0 cursor-pointer py-2.5"
+                        @click.stop="toggleDir(node.path)"
+                    >
+                        <span :class="nodeIcon(node)" class="h-4 w-4 text-[var(--text-muted)]"></span>
+                        <span
+                            class="i-lucide-chevron-right h-3 w-3 text-[var(--text-muted)] transition-transform duration-150"
+                            :class="expandedDirs.has(node.path) ? 'rotate-90' : ''"
+                        ></span>
+                    </span>
+                    <span v-else :class="nodeIcon(node)" class="h-4 w-4 shrink-0 text-[var(--text-muted)] py-2.5"></span>
 
-                    <!-- 名称 -->
-                    <span class="min-w-0 flex-1 truncate py-2.5 pr-3">{{ nodeLabel(node) }}</span>
+                    <!-- 名称区（可点击预览/选中） -->
+                    <span class="min-w-0 flex-1 truncate py-2.5 pr-3 active:bg-[var(--bg-hover)]" @click="selectNode(node)">{{ nodeLabel(node) }}</span>
 
                     <!-- 字数（文件或内容目录） -->
                     <span v-if="isContentNode(node) && node.words" class="shrink-0 text-[10px] text-[var(--text-muted)] pr-2">
                         {{ node.words }} 字
                     </span>
-
-                    <!-- 展开子目录指示器（独立点击，不触发行选中） -->
-                    <span
-                        v-if="node.isDirectory && node.children.length > 0"
-                        class="i-lucide-chevron-right h-3 w-3 shrink-0 text-[var(--text-muted)] mr-2 transition-transform duration-150"
-                        :class="expandedDirs.has(node.path) ? 'rotate-90' : ''"
-                        @click.stop="toggleDir(node.path)"
-                    ></span>
                 </div>
             </template>
         </div>
