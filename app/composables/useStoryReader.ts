@@ -67,10 +67,12 @@ export function useStoryReader() {
 
         try {
             // 通过 workspace tree API 列出 ticks 目录
+            console.log("[useStoryReader] loadTickList projectPath:", projectPath);
             const tree = await $fetch<{ nodes?: Array<{ path: string; isDirectory: boolean; title?: string }> }>(
                 "/api/workspace-files/tree",
                 { query: { projectPath, target: "simulation/runs/ticks", depth: 1 } }
             );
+            console.log("[useStoryReader] tree response:", JSON.stringify(tree));
 
             const dirs = (tree.nodes ?? [])
                 .filter(n => n.isDirectory)
@@ -90,8 +92,10 @@ export function useStoryReader() {
                 })
                 .sort((a, b) => a.numericId - b.numericId);
 
+            console.log("[useStoryReader] parsed dirs:", JSON.stringify(dirs));
             ticks.value = dirs;
-        } catch {
+        } catch (err) {
+            console.error("[useStoryReader] loadTickList error:", err);
             ticks.value = [];
             error.value = "加载章节列表失败";
         }
@@ -111,9 +115,11 @@ export function useStoryReader() {
             const projectPath = novelIdeStore.currentNovelId;
             if (!projectPath) { error.value = "未选择项目"; return; }
 
+            console.log("[useStoryReader] loadTick prosePath:", tick.prosePath, "projectPath:", projectPath);
             const { content } = await $fetch<{ content: string }>("/api/workspace-files/read", {
                 query: { projectPath, path: tick.prosePath },
             });
+            console.log("[useStoryReader] loadTick content length:", content?.length);
 
             const { frontmatter, body } = parseFrontmatter(content);
             // 优先使用 frontmatter.title，其次 tick 自身的 title，最后回退到 slug
@@ -129,6 +135,7 @@ export function useStoryReader() {
             mobileUi.currentTickId = tickId;
             currentIndex.value = ticks.value.findIndex(t => t.id === tickId);
         } catch (err) {
+            console.error("[useStoryReader] loadTick error:", err);
             error.value = "加载章节内容失败";
             proseHtml.value = "";
         } finally {
