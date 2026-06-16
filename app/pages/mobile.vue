@@ -50,6 +50,11 @@ function getAgentSessionId(): number | null {
     return agentSurfaceRef.value?.activeSessionId ?? null;
 }
 
+/** 获取 Agent 是否正在运行（供剧情页显示停止按钮） */
+function isAgentRunning(): boolean {
+    return agentSurfaceRef.value?.running ?? false;
+}
+
 // ---------- Auth ----------
 /**
  * 同步当前登录用户，与 index.vue 中的 syncAuthSession 逻辑一致。
@@ -172,6 +177,7 @@ function handleCloseFile(): void {
                 <MobileStoryReader
                     :novel-id="currentNovelId"
                     :get-session-id="getAgentSessionId"
+                    :is-running="isAgentRunning"
                 />
             </div>
 

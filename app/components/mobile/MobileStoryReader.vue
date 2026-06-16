@@ -9,6 +9,8 @@ const props = defineProps<{
     novelId: string | null;
     /** 回调：获取当前 Agent 会话 ID */
     getSessionId: () => number | null;
+    /** 回调：获取 Agent 是否正在运行 */
+    isRunning: () => boolean;
 }>();
 
 const mobileUi = useMobileUiStore();
@@ -144,7 +146,7 @@ function handleSelectTick(tickId: string): void {
 
         <!-- 底部剧情对话框（通过回调读取聊天页 Agent 会话） -->
         <div class="shrink-0 border-t border-[var(--border-color)] bg-[var(--bg-panel)]">
-            <MobileStoryComposer :get-session-id="props.getSessionId" />
+            <MobileStoryComposer :get-session-id="props.getSessionId" :is-running="props.isRunning" />
         </div>
     </div>
 </template>
