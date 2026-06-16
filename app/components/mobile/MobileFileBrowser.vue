@@ -32,19 +32,23 @@ const previewPath = ref<string | null>(null);
 const visibleNodes = computed<{ node: WorkspaceTreeNode; depth: number }[]>(() => {
     const result: { node: WorkspaceTreeNode; depth: number }[] = [];
 
-    function walk(nodes: WorkspaceTreeNode[], depth: number): void {
+    function walk(nodes: WorkspaceTreeNode[], depth: number, parentIsContentDir: boolean): void {
         for (const node of nodes) {
+            // 内容目录下的 index.md 不显示——点击目录本身即可访问内容
+            if (parentIsContentDir && node.path.endsWith("/index.md")) {
+                continue;
+            }
             result.push({ node, depth });
             // 展开子节点的条件：目录有子节点且在展开集合中
             const shouldExpand = node.isDirectory && node.children.length > 0
                 && expandedDirs.value.has(node.path);
             if (shouldExpand) {
-                walk(node.children, depth + 1);
+                walk(node.children, depth + 1, isWorkspaceContentDirectoryNode(node));
             }
         }
     }
 
-    walk(fileTree.value, 0);
+    walk(fileTree.value, 0, false);
     return result;
 });
 
