@@ -413,6 +413,7 @@ function onTouchMove(event: TouchEvent): void {
 
 function onTouchEnd(event: TouchEvent): void {
     clearLongPressTimer();
+    // 阻止长按后移动端触发的合成 click 事件，避免误触发 selectNode
     if (longPressTriggered && event.cancelable) {
         event.preventDefault();
     }
@@ -450,6 +451,7 @@ function onRootTouchMove(event: TouchEvent): void {
 
 function onRootTouchEnd(event: TouchEvent): void {
     clearLongPressTimer();
+    // 阻止长按后移动端触发的合成 click 事件，避免误触发 selectNode
     if (longPressTriggered && event.cancelable) {
         event.preventDefault();
     }
