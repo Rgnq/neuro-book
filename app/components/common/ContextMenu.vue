@@ -53,55 +53,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     (e: "close"): void;
-    (e: "longpress", x: number, y: number): void;
 }>();
-
-/**
- * 长按检测指令。
- * 在 touchstart 时启动计时器，touchend/touchmove 时取消。
- * 按住 500ms 无移动视为长按。
- */
-const LONGPRESS_DURATION = 500;
-const LONGPRESS_MOVE_THRESHOLD = 10;
-
-let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-let longPressStartX = 0;
-let longPressStartY = 0;
-
-/** 清除长按计时器 */
-function clearLongPress(): void {
-    if (longPressTimer !== null) {
-        clearTimeout(longPressTimer);
-        longPressTimer = null;
-    }
-}
-
-/** 绑定长按事件到目标元素 */
-function bindLongPress(el: HTMLElement): void {
-    el.addEventListener("touchstart", (e: TouchEvent) => {
-        const touch = e.touches[0];
-        longPressStartX = touch.clientX;
-        longPressStartY = touch.clientY;
-        longPressTimer = setTimeout(() => {
-            emit("longpress", touch.clientX, touch.clientY);
-        }, LONGPRESS_DURATION);
-    }, { passive: true });
-
-    el.addEventListener("touchend", clearLongPress);
-    el.addEventListener("touchcancel", clearLongPress);
-    el.addEventListener("touchmove", (e: TouchEvent) => {
-        const touch = e.touches[0];
-        if (
-            Math.abs(touch.clientX - longPressStartX) > LONGPRESS_MOVE_THRESHOLD ||
-            Math.abs(touch.clientY - longPressStartY) > LONGPRESS_MOVE_THRESHOLD
-        ) {
-            clearLongPress();
-        }
-    }, { passive: true });
-}
-
-// 暴露给父组件调用
-defineExpose({ bindLongPress, clearLongPress });
 
 const menuRef = ref<HTMLElement | null>(null);
 const adjustedX = ref(props.x);
@@ -136,7 +88,6 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-    clearLongPress();
     document.removeEventListener("click", closeMenu, true);
     document.removeEventListener("contextmenu", closeMenu, true);
 });
