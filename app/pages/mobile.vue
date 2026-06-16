@@ -9,6 +9,7 @@ import MobileHeader from "nbook/app/components/mobile/MobileHeader.vue";
 import MobileTabBar from "nbook/app/components/mobile/MobileTabBar.vue";
 import MobileEditorToolbar from "nbook/app/components/mobile/MobileEditorToolbar.vue";
 import MobileFileBrowser from "nbook/app/components/mobile/MobileFileBrowser.vue";
+import MobileStoryReader from "nbook/app/components/mobile/MobileStoryReader.vue";
 import AgentChatSurface from "nbook/app/components/novel-ide/agent/AgentChatSurface.vue";
 import TipTapMarkdownEditor from "nbook/app/components/markdown-studio/TipTapMarkdownEditor.vue";
 import type { MarkdownFormatCommand, MarkdownStudioEditorHandle } from "nbook/app/composables/useMarkdownStudioController";
@@ -34,6 +35,8 @@ const authSessionState = useAuthSessionState();
 
 const themeHostRef = ref<HTMLElement | null>(null);
 const agentSurfaceRef = ref<InstanceType<typeof AgentChatSurface> | null>(null);
+/** 剧情页引用 */
+const storyReaderRef = ref<InstanceType<typeof MobileStoryReader> | null>(null);
 const editorRef = ref<MarkdownStudioEditorHandle | null>(null);
 const currentUser = ref<AuthSessionDto["user"]>(null);
 
@@ -42,7 +45,8 @@ const novelDialogOpen = ref(false);
 const settingsDialogOpen = ref(false);
 
 // ---------- Agent Session 状态 ----------
-const hasActiveSession = computed(() => agentSurfaceRef.value?.activeSessionId != null);
+const hasActiveSession = computed(() => agentSurfaceRef.value?.activeSessionId != null
+    || storyReaderRef.value?.activeSessionId != null);
 
 // ---------- Auth ----------
 /**
@@ -156,6 +160,15 @@ function handleCloseFile(): void {
                     ref="agentSurfaceRef"
                     :active="true"
                     layout="mobile"
+                    :novel-id="currentNovelId"
+                    :selected-file-path="selectedFilePath"
+                />
+            </div>
+
+            <!-- 剧情 Tab -->
+            <div v-show="mobileUi.activeTab === 'story'" class="flex h-full flex-col">
+                <MobileStoryReader
+                    ref="storyReaderRef"
                     :novel-id="currentNovelId"
                     :selected-file-path="selectedFilePath"
                 />
