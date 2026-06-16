@@ -13,6 +13,7 @@ const emit = defineEmits<{
 
 const tabs: { key: MobileTab; label: string; icon: string }[] = [
     { key: "chat", label: "聊天", icon: "i-lucide-message-circle" },
+    { key: "story", label: "剧情", icon: "i-lucide-book-open" },
     { key: "editor", label: "编辑", icon: "i-lucide-pen-line" },
     { key: "files", label: "文件", icon: "i-lucide-folder-open" },
 ];
