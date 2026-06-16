@@ -51,7 +51,7 @@ function isSeparator(item: ContextMenuItem): boolean {
 
                 <!-- 底部操作表单 -->
                 <div
-                    class="relative z-10 rounded-t-2xl border-t border-[var(--border-color)] bg-[var(--bg-panel)] pb-[calc(var(--safe-area-bottom)+8px)] max-h-[70vh] overflow-y-auto animate-slide-up"
+                    class="relative z-10 rounded-t-2xl border-t border-[var(--border-color)] bg-[var(--bg-panel)] pb-[calc(var(--safe-area-bottom)+8px)] max-h-[70vh] overflow-y-auto slide-up-panel"
                 >
                     <!-- 拖拽指示条 -->
                     <div class="flex justify-center pt-2 pb-1">
@@ -126,18 +126,18 @@ function isSeparator(item: ContextMenuItem): boolean {
 .nb-sheet-leave-active {
     transition: opacity 0.25s ease;
 }
-.nb-sheet-enter-active .animate-slide-up,
-.nb-sheet-leave-active .animate-slide-up {
+.nb-sheet-enter-active .slide-up-panel,
+.nb-sheet-leave-active .slide-up-panel {
     transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
 }
 .nb-sheet-enter-from,
 .nb-sheet-leave-to {
     opacity: 0;
 }
-.nb-sheet-enter-from .animate-slide-up {
+.nb-sheet-enter-from .slide-up-panel {
     transform: translateY(100%);
 }
-.nb-sheet-leave-to .animate-slide-up {
+.nb-sheet-leave-to .slide-up-panel {
     transform: translateY(100%);
 }
 </style>

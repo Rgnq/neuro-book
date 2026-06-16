@@ -77,7 +77,9 @@ onMounted(async () => {
         return;
     }
 
-    mountThemeHost(themeHostRef.value!);
+    if (themeHostRef.value) {
+        mountThemeHost(themeHostRef.value);
+    }
     void syncAuthSession();
     await novelIdeStore.initializeWorkspace();
 });

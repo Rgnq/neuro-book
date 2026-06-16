@@ -162,6 +162,13 @@ function updateViewMode(value: string): void {
     novelIdeStore.viewMode = value as typeof novelIdeStore.viewMode;
 }
 
+/** 从 input change 事件中提取数字值，解析失败时返回 fallback */
+function extractNumberFromEvent(event: Event, fallback: number): number {
+    const value = (event.target as HTMLInputElement).value;
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? fallback : parsed;
+}
+
 // ---- editor inline ----
 const editorFontOptions: SelectOption[] = [
     { value: "\"Source Han Serif SC\", \"Noto Serif SC\", \"Songti SC\", serif", label: "中文衬线" },
@@ -305,7 +312,7 @@ const monacoFontOptions: SelectOption[] = [
                     </div>
                     <div class="flex items-center justify-between rounded-lg border border-[var(--border-color)] px-3 py-2.5">
                         <span class="text-[12px] text-[var(--text-main)]">字号</span>
-                        <input type="number" :value="markdownEditorPreferences.fontSize" class="w-16 rounded border border-[var(--border-color)] bg-[var(--bg-input)] px-2 py-1 text-right text-[12px]" min="12" max="24" @change="markdownEditorPreferences.fontSize = Number(($event.target as HTMLInputElement).value)" />
+                        <input type="number" :value="markdownEditorPreferences.fontSize" class="w-16 rounded border border-[var(--border-color)] bg-[var(--bg-input)] px-2 py-1 text-right text-[12px]" min="12" max="24" @change="markdownEditorPreferences.fontSize = extractNumberFromEvent($event, 16)" />
                     </div>
                     <div class="border-t border-[var(--border-color)] pt-2 mt-2">
                         <div class="text-[11px] text-[var(--text-muted)] mb-2">Monaco 源码编辑器</div>
@@ -315,7 +322,7 @@ const monacoFontOptions: SelectOption[] = [
                         </div>
                         <div class="flex items-center justify-between rounded-lg border border-[var(--border-color)] px-3 py-2.5 mt-2">
                             <span class="text-[12px] text-[var(--text-main)]">字号</span>
-                            <input type="number" :value="monacoEditorPreferences.fontSize" class="w-16 rounded border border-[var(--border-color)] bg-[var(--bg-input)] px-2 py-1 text-right text-[12px]" min="10" max="24" @change="monacoEditorPreferences.fontSize = Number(($event.target as HTMLInputElement).value)" />
+                            <input type="number" :value="monacoEditorPreferences.fontSize" class="w-16 rounded border border-[var(--border-color)] bg-[var(--bg-input)] px-2 py-1 text-right text-[12px]" min="10" max="24" @change="monacoEditorPreferences.fontSize = extractNumberFromEvent($event, 14)" />
                         </div>
                     </div>
                 </div>
