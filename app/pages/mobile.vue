@@ -5,12 +5,13 @@ import { useMobileUiStore, type MobileTab } from "nbook/app/stores/mobile-ui";
 import { useMobileDetect } from "nbook/app/composables/useMobileDetect";
 import { useIdeTheme } from "nbook/app/composables/useIdeTheme";
 import { useAuthSessionState } from "nbook/app/composables/useAuthSessionState";
-import { useMarkdownStudioController } from "nbook/app/composables/useMarkdownStudioController";
 import MobileHeader from "nbook/app/components/mobile/MobileHeader.vue";
 import MobileTabBar from "nbook/app/components/mobile/MobileTabBar.vue";
 import MobileEditorToolbar from "nbook/app/components/mobile/MobileEditorToolbar.vue";
 import MobileFileBrowser from "nbook/app/components/mobile/MobileFileBrowser.vue";
 import AgentChatSurface from "nbook/app/components/novel-ide/agent/AgentChatSurface.vue";
+import TipTapMarkdownEditor from "nbook/app/components/markdown-studio/TipTapMarkdownEditor.vue";
+import type { MarkdownFormatCommand, MarkdownStudioEditorHandle } from "nbook/app/composables/useMarkdownStudioController";
 import type { DropdownItem } from "nbook/app/components/common/dropdown.types";
 import type { AuthSessionDto } from "nbook/shared/dto/auth.dto";
 
@@ -24,7 +25,6 @@ const {
     novels,
     selectedFileContent,
     selectedFilePath,
-    viewMode,
     theme,
 } = storeToRefs(novelIdeStore);
 
@@ -33,6 +33,7 @@ const authSessionState = useAuthSessionState();
 
 const themeHostRef = ref<HTMLElement | null>(null);
 const agentSurfaceRef = ref<InstanceType<typeof AgentChatSurface> | null>(null);
+const editorRef = ref<MarkdownStudioEditorHandle | null>(null);
 const currentUser = ref<AuthSessionDto["user"]>(null);
 
 // ---------- Agent Session 状态 ----------
@@ -111,17 +112,14 @@ async function handleCreateSession(): Promise<void> {
 }
 
 // ---------- 编辑器 ----------
-const studio = useMarkdownStudioController({
-    markdown: selectedFileContent,
-    viewMode,
-});
+/** 用户编辑后的内容先写到 store buffer，后续通过 store 保存 */
+function handleEditorChange(value: string): void {
+    selectedFileContent.value = value;
+}
 
-/** 处理格式工具栏事件 — MVP 阶段为简化实现，后续迭代接入 TipTap */
-function handleFormat(kind: "bold" | "italic" | "h1" | "h2" | "h3" | "bullet" | "ordered" | "link" | "comment"): void {
-    // MVP: 格式操作通过 TipTapMarkdownEditor 的 editor chain 执行
-    // 后续迭代完善
-    void kind;
-    void studio;
+/** 格式工具栏 — 转发命令到 TipTapMarkdownEditor */
+function handleFormat(command: MarkdownFormatCommand): void {
+    editorRef.value?.applyMarkdownFormat?.(command);
 }
 
 /** 文件浏览器点击"在编辑器中打开" */
@@ -167,13 +165,20 @@ async function handleOpenEditor(path: string): Promise<void> {
             <!-- 编辑 Tab -->
             <div v-show="mobileUi.activeTab === 'editor'" class="flex h-full flex-col">
                 <MobileEditorToolbar @format="handleFormat" />
-                <div class="flex-1 overflow-y-auto px-4 py-3">
+                <div class="flex-1 overflow-hidden">
                     <div v-if="!selectedFilePath" class="flex h-full items-center justify-center text-[var(--text-muted)] text-[13px]">
                         从「文件」标签页选择文件开始编辑
                     </div>
-                    <div v-else class="h-full">
-                        <!-- MVP: 使用 pre 纯文本显示选中文件内容 -->
-                        <pre class="whitespace-pre-wrap font-mono text-[12px] leading-relaxed">{{ selectedFileContent }}</pre>
+                    <div v-else class="h-full overflow-y-auto">
+                        <TipTapMarkdownEditor
+                            ref="editorRef"
+                            :initial-value="selectedFileContent"
+                            :visible="true"
+                            :readonly="false"
+                            :active-path="selectedFilePath"
+                            placeholder="开始写作..."
+                            @change="handleEditorChange"
+                        />
                     </div>
                 </div>
             </div>
