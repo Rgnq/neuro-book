@@ -114,6 +114,7 @@ const contextMenuTitle = ref("");
 let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 let longPressStartX = 0;
 let longPressStartY = 0;
+let longPressTriggered = false;
 
 /** 判断节点是否可以转化为目录节点 */
 function canCreateDirectoryIndex(node: WorkspaceFileNode): boolean {
@@ -393,9 +394,11 @@ function onTouchStart(event: TouchEvent, node: WorkspaceTreeNode): void {
     longPressStartX = touch.clientX;
     longPressStartY = touch.clientY;
     contextMenuTarget.value = node;
+    longPressTriggered = false;
 
     clearLongPressTimer();
     longPressTimer = setTimeout(() => {
+        longPressTriggered = true;
         showNodeMenu(node);
     }, 500);
 }
@@ -408,8 +411,11 @@ function onTouchMove(event: TouchEvent): void {
     if (dx > 10 || dy > 10) clearLongPressTimer();
 }
 
-function onTouchEnd(): void {
+function onTouchEnd(event: TouchEvent): void {
     clearLongPressTimer();
+    if (longPressTriggered && event.cancelable) {
+        event.preventDefault();
+    }
 }
 
 function clearLongPressTimer(): void {
@@ -425,9 +431,11 @@ function onRootTouchStart(event: TouchEvent): void {
     const touch = event.touches[0];
     longPressStartX = touch.clientX;
     longPressStartY = touch.clientY;
+    longPressTriggered = false;
 
     clearLongPressTimer();
     longPressTimer = setTimeout(() => {
+        longPressTriggered = true;
         showRootMenu();
     }, 500);
 }
@@ -440,8 +448,11 @@ function onRootTouchMove(event: TouchEvent): void {
     }
 }
 
-function onRootTouchEnd(): void {
+function onRootTouchEnd(event: TouchEvent): void {
     clearLongPressTimer();
+    if (longPressTriggered && event.cancelable) {
+        event.preventDefault();
+    }
 }
 
 onBeforeUnmount(() => clearLongPressTimer());
@@ -454,8 +465,8 @@ onBeforeUnmount(() => clearLongPressTimer());
             class="flex-1 overflow-y-auto"
             @touchstart="onRootTouchStart"
             @touchmove="onRootTouchMove"
-            @touchend="onRootTouchEnd"
-            @touchcancel="onRootTouchEnd"
+            @touchend="onRootTouchEnd($event)"
+            @touchcancel="onRootTouchEnd($event)"
         >
             <div v-if="!workspaceReady" class="flex items-center justify-center h-20 text-[12px] text-[var(--text-muted)]">
                 加载中...
@@ -472,8 +483,8 @@ onBeforeUnmount(() => clearLongPressTimer());
                     :style="{ paddingLeft: `${8 + depth * 16}px` }"
                     @touchstart.stop="onTouchStart($event, node)"
                     @touchmove="onTouchMove"
-                    @touchend="onTouchEnd"
-                    @touchcancel="onTouchEnd"
+                    @touchend="onTouchEnd($event)"
+                    @touchcancel="onTouchEnd($event)"
                 >
                     <span
                         v-if="node.isDirectory && node.children.length > 0"
