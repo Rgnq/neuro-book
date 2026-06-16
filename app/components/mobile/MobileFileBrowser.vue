@@ -35,9 +35,9 @@ const visibleNodes = computed<{ node: WorkspaceTreeNode; depth: number }[]>(() =
     function walk(nodes: WorkspaceTreeNode[], depth: number): void {
         for (const node of nodes) {
             result.push({ node, depth });
-            // 展开子节点的条件：目录有子节点 且 (用户手动展开 或 是内容目录自动展开)
+            // 展开子节点的条件：目录有子节点且在展开集合中
             const shouldExpand = node.isDirectory && node.children.length > 0
-                && (expandedDirs.value.has(node.path) || isWorkspaceContentDirectoryNode(node));
+                && expandedDirs.value.has(node.path);
             if (shouldExpand) {
                 walk(node.children, depth + 1);
             }

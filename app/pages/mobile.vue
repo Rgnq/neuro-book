@@ -172,6 +172,7 @@ async function handleOpenEditor(path: string): Promise<void> {
                     <div v-else class="h-full overflow-y-auto">
                         <TipTapMarkdownEditor
                             ref="editorRef"
+                            :key="selectedFilePath"
                             :initial-value="selectedFileContent"
                             :visible="true"
                             :readonly="false"
