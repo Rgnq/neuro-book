@@ -92,9 +92,17 @@ function handleSelectTick(tickId: string): void {
 
         <!-- prose 阅读区 -->
         <div class="flex-1 overflow-y-auto">
+            <!-- 加载错误（优先于空状态显示） -->
+            <div
+                v-if="story.error"
+                class="flex h-full items-center justify-center px-6 text-center text-[13px] text-[var(--text-muted)]"
+            >
+                {{ story.error }}
+            </div>
+
             <!-- 空状态：无 tick -->
             <div
-                v-if="story.totalTicks === 0 && !story.loading"
+                v-else-if="story.totalTicks === 0 && !story.loading"
                 class="flex h-full items-center justify-center px-6 text-center text-[13px] text-[var(--text-muted)]"
             >
                 暂无剧情内容<br>开始世界模拟后将在此显示
@@ -106,14 +114,6 @@ function handleSelectTick(tickId: string): void {
                 class="flex h-full items-center justify-center"
             >
                 <span class="i-lucide-loader-2 h-5 w-5 animate-spin text-[var(--text-muted)]" />
-            </div>
-
-            <!-- 加载错误 -->
-            <div
-                v-else-if="story.error"
-                class="flex h-full items-center justify-center px-6 text-center text-[13px] text-[var(--text-muted)]"
-            >
-                {{ story.error }}
             </div>
 
             <!-- prose 内容 -->

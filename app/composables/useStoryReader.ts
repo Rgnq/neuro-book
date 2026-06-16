@@ -75,7 +75,10 @@ export function useStoryReader() {
             const dirs = (tree.nodes ?? [])
                 .filter(n => n.isDirectory)
                 .map(n => {
-                    const id = n.path.split("/").pop() ?? n.path;
+                    // toWorkspaceDisplayPath 对目录返回尾部带 / 的路径，
+                    // 需先去除再提取最后一段作为目录名
+                    const cleanPath = n.path.replace(/\/$/, "");
+                    const id = cleanPath.split("/").pop() ?? cleanPath;
                     const match = id.match(/^(\d+)/);
                     const numericId = match ? Number.parseInt(match[1], 10) : 0;
                     return {
