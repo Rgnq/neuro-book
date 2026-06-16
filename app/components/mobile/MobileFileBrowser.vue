@@ -30,9 +30,6 @@ const fileTree = computed(() => buildWorkspaceFileTree(workspaceTree.value));
 /** 展开的目录集合 */
 const expandedDirs = ref<Set<string>>(new Set());
 
-/** 当前展开预览的文件路径 */
-const previewPath = ref<string | null>(null);
-
 /** 根据展开状态计算可见的树节点列表 */
 const visibleNodes = computed<{ node: WorkspaceTreeNode; depth: number }[]>(() => {
     const result: { node: WorkspaceTreeNode; depth: number }[] = [];
@@ -63,17 +60,18 @@ function isContentNode(node: WorkspaceFileNode): boolean {
     return !node.isDirectory || isWorkspaceContentDirectoryNode(node);
 }
 
+/** 点击节点：目录折叠/展开，文件和内容目录直接在编辑器中打开 */
 function selectNode(node: WorkspaceFileNode): void {
     if (node.isDirectory) {
         if (isWorkspaceContentDirectoryNode(node)) {
             const representedPath = resolveWorkspaceNodeRepresentedPath(node);
-            previewPath.value = previewPath.value === representedPath ? null : representedPath;
+            openInEditor(representedPath);
         } else {
             toggleDir(node.path);
         }
         return;
     }
-    previewPath.value = previewPath.value === node.path ? null : node.path;
+    openInEditor(node.path);
 }
 
 function openInEditor(path: string): void {
@@ -480,7 +478,6 @@ onBeforeUnmount(() => clearLongPressTimer());
                     v-for="{ node, depth } in visibleNodes"
                     :key="node.path"
                     class="flex items-center gap-2 border-b border-[var(--border-color)]/50 text-[13px] transition-colors select-none"
-                    :class="previewPath === resolveWorkspaceNodeRepresentedPath(node) ? 'bg-[var(--accent-bg)]' : ''"
                     :style="{ paddingLeft: `${8 + depth * 16}px` }"
                     @touchstart.stop="onTouchStart($event, node)"
                     @touchmove="onTouchMove"
@@ -509,26 +506,6 @@ onBeforeUnmount(() => clearLongPressTimer());
                     </span>
                 </div>
             </template>
-        </div>
-
-        <!-- 只读预览面板 -->
-        <div
-            v-if="previewPath"
-            class="shrink-0 border-t-2 border-[var(--accent-main)]/30 bg-[var(--editor-canvas-bg)]"
-        >
-            <div class="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)]/50">
-                <span class="text-[10px] text-[var(--text-muted)] truncate">📖 {{ previewPath.split("/").pop() }}</span>
-                <button
-                    type="button"
-                    class="shrink-0 rounded px-2 py-0.5 text-[10px] text-[var(--accent-main)] active:bg-[var(--bg-hover)]"
-                    @click="openInEditor(previewPath)"
-                >
-                    在编辑器中打开
-                </button>
-            </div>
-            <div class="max-h-[200px] overflow-y-auto px-3 py-2 text-[12px] leading-relaxed text-[var(--text-muted)]">
-                <span class="text-[10px]">{{ previewPath }}</span>
-            </div>
         </div>
 
         <!-- 长按上下文菜单 -->
