@@ -1,6 +1,10 @@
-import { renderMarkdown } from "nbook/app/utils/markdown/render";
+import { marked } from "marked";
 import { useNovelIdeStore } from "nbook/app/stores/novel-ide";
 import { useMobileUiStore } from "nbook/app/stores/mobile-ui";
+
+/** 专用于 prose 阅读的 Marked 实例：GFM + breaks，无聊天泡自定义扩展 */
+const proseMarked = new marked.Marked();
+proseMarked.setOptions({ gfm: true, breaks: true });
 
 /** tick 条目信息 */
 export interface TickEntry {
@@ -67,12 +71,10 @@ export function useStoryReader() {
 
         try {
             // 服务器不支持 target/depth 过滤，请求完整 workspace tree 后在客户端筛选
-            console.log("[useStoryReader] loadTickList projectPath:", projectPath);
             const tree = await $fetch<{ nodes?: Array<{ path: string; isDirectory: boolean; title?: string; mtimeMs?: number }> }>(
                 "/api/workspace-files/tree",
                 { query: { projectPath } }
             );
-            console.log("[useStoryReader] tree node count:", tree.nodes?.length ?? 0);
 
             // 筛选 simulation/runs/ticks/ 下的直接子目录
             const dirs = (tree.nodes ?? [])
@@ -97,7 +99,6 @@ export function useStoryReader() {
                 })
                 .sort((a, b) => a.numericId - b.numericId);
 
-            console.log("[useStoryReader] parsed tick dirs:", JSON.stringify(dirs.map(d => d.id)));
             ticks.value = dirs;
         } catch (err) {
             console.error("[useStoryReader] loadTickList error:", err);
@@ -120,20 +121,18 @@ export function useStoryReader() {
             const projectPath = novelIdeStore.currentNovelId;
             if (!projectPath) { error.value = "未选择项目"; return; }
 
-            console.log("[useStoryReader] loadTick prosePath:", tick.prosePath, "projectPath:", projectPath);
             const { content } = await $fetch<{ content: string }>("/api/workspace-files/read", {
                 query: { projectPath, path: tick.prosePath },
             });
-            console.log("[useStoryReader] loadTick content length:", content?.length);
 
             const { frontmatter, body } = parseFrontmatter(content);
             // 优先使用 frontmatter.title，其次 tick 自身的 title，最后回退到 slug
             title.value = frontmatter.title || tick.title || tick.id;
 
-            // normalizeMultilineHtml 将跨行 HTML 压缩为单行，
-            // 确保 Marked 能正确识别内联 HTML 块
+            // 使用 prose 专用 Marked 实例（无聊天泡自定义扩展），
+            // normalizeMultilineHtml 压缩跨行 HTML 确保正确识别
             const trimmed = body.trim();
-            proseHtml.value = trimmed ? renderMarkdown(normalizeMultilineHtml(trimmed)) : "";
+            proseHtml.value = trimmed ? await proseMarked.parse(normalizeMultilineHtml(trimmed)) : "";
 
             // 更新 store 状态
             mobileUi.currentTickId = tickId;
@@ -202,9 +201,10 @@ export function useStoryReader() {
  * 例如 `<div style="\n  color: red;\n">` → `<div style=" color: red; ">`
  */
 function normalizeMultilineHtml(html: string): string {
-    // 匹配 <tag ... > 形式的跨行标签（贪婪匹配属性直到最近的 >）
+    // 匹配 <tag ... > 形式的跨行标签（属性跨行时 Marked 无法识别）
     return html.replace(/<(\w+)([^>]*?)>/gs, (_full, tag, attrs) => {
-        // 将属性内的换行和多余空白压缩
+        // 跳过 <pre> 和 <code>：内部空白是有意义的内容
+        if (tag === "pre" || tag === "code") return _full;
         const compact = attrs.replace(/\s+/g, " ").trim();
         return `<${tag}${compact ? ` ${compact}` : ""}>`;
     });

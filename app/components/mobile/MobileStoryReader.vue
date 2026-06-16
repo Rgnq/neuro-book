@@ -156,10 +156,13 @@ function handleSelectTick(tickId: string): void {
  * prose 正文排版
  * 只作用于 Markdown 生成的元素，内联 HTML <div> 不受影响
  */
-.prose-body {
+/* 排版仅作用于 Markdown 文本元素，内联 HTML <div>/<span> 不受影响 */
+.prose-body :deep(:where(h1, h2, h3, h4, h5, h6, p, li, blockquote, th, td, pre, ul, ol)) {
+    font-family: Georgia, 'Noto Serif SC', serif;
+}
+.prose-body :deep(:where(p, li, blockquote, th, td, ul, ol)) {
     font-size: 15px;
     line-height: 1.9;
-    font-family: Georgia, 'Noto Serif SC', serif;
 }
 
 /* 标题层级 */
