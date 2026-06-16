@@ -1,10 +1,9 @@
-import { marked } from "marked";
+import { Marked } from "marked";
 import { useNovelIdeStore } from "nbook/app/stores/novel-ide";
 import { useMobileUiStore } from "nbook/app/stores/mobile-ui";
 
 /** 专用于 prose 阅读的 Marked 实例：GFM + breaks，无聊天泡自定义扩展 */
-const proseMarked = new marked.Marked();
-proseMarked.setOptions({ gfm: true, breaks: true });
+const proseMarked = new Marked({ gfm: true, breaks: true });
 
 /** tick 条目信息 */
 export interface TickEntry {
