@@ -35,6 +35,16 @@ const themeHostRef = ref<HTMLElement | null>(null);
 const agentSurfaceRef = ref<InstanceType<typeof AgentChatSurface> | null>(null);
 const currentUser = ref<AuthSessionDto["user"]>(null);
 
+// ---------- Agent Session 状态 ----------
+/** 从 AgentChatSurface 读取的 session 列表（通过 defineExpose 暴露） */
+const mobileSessions = computed(() => agentSurfaceRef.value?.sessions ?? []);
+
+/** 从 AgentChatSurface 读取的当前 active session ID */
+const mobileActiveSessionId = computed(() => agentSurfaceRef.value?.activeSessionId ?? null);
+
+/** 从 AgentChatSurface 读取的 session 加载状态 */
+const mobileLoadingSession = computed(() => agentSurfaceRef.value?.loadingSession ?? false);
+
 // ---------- Auth ----------
 /**
  * 同步当前登录用户，与 index.vue 中的 syncAuthSession 逻辑一致。
@@ -89,6 +99,17 @@ async function handleSwitchNovel(novelId: string): Promise<void> {
     await novelIdeStore.switchNovel(novelId);
 }
 
+// ---------- Session 操作 ----------
+/** 选择 Session */
+function handleSelectSession(sessionId: number): void {
+    agentSurfaceRef.value?.selectSession(sessionId);
+}
+
+/** 创建新 Session */
+async function handleCreateSession(): Promise<void> {
+    await agentSurfaceRef.value?.createSession();
+}
+
 // ---------- 编辑器 ----------
 const studio = useMarkdownStudioController({
     markdown: selectedFileContent,
@@ -122,10 +143,12 @@ async function handleOpenEditor(path: string): Promise<void> {
         <MobileHeader
             :novel-items="novelItems"
             :novel-title="novelTitle"
-            :sessions="[]"
-            :active-session-id="null"
-            :loading-session="false"
+            :sessions="mobileSessions"
+            :active-session-id="mobileActiveSessionId"
+            :loading-session="mobileLoadingSession"
             @switch-novel="handleSwitchNovel"
+            @select-session="handleSelectSession"
+            @create-session="handleCreateSession"
         />
 
         <!-- Tab 内容区 — KeepAlive 保持各 Tab 状态 -->
