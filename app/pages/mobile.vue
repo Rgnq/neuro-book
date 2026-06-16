@@ -15,6 +15,7 @@ import Dialog from "nbook/app/components/common/Dialog.vue";
 import type { MarkdownFormatCommand, MarkdownStudioEditorHandle } from "nbook/app/composables/useMarkdownStudioController";
 import type { DropdownItem } from "nbook/app/components/common/dropdown.types";
 import type { AuthSessionDto } from "nbook/shared/dto/auth.dto";
+import MobileSettingsDialog from "nbook/app/components/mobile/MobileSettingsDialog.vue";
 
 const novelIdeStore = useNovelIdeStore();
 const mobileUi = useMobileUiStore();
@@ -39,6 +40,7 @@ const currentUser = ref<AuthSessionDto["user"]>(null);
 
 // ---------- 弹窗状态 ----------
 const novelDialogOpen = ref(false);
+const settingsDialogOpen = ref(false);
 
 // ---------- Agent Session 状态 ----------
 const hasActiveSession = computed(() => agentSurfaceRef.value?.activeSessionId != null);
@@ -140,6 +142,7 @@ async function handleOpenEditor(path: string): Promise<void> {
             :has-active-session="hasActiveSession"
             @open-novels="handleOpenNovels"
             @open-sessions="handleOpenSessions"
+            @open-settings="settingsDialogOpen = true"
         />
 
         <!-- Tab 内容区 — v-show 保持各 Tab 挂载不销毁 -->
@@ -211,6 +214,9 @@ async function handleOpenEditor(path: string): Promise<void> {
                 </button>
             </div>
         </Dialog>
+
+        <!-- 设置弹窗 -->
+        <MobileSettingsDialog v-model="settingsDialogOpen" />
     </div>
 
     <!-- 非移动端占位 -->
