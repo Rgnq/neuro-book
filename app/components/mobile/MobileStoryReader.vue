@@ -133,8 +133,7 @@ function handleSelectTick(tickId: string): void {
 
                 <!-- 正文（注入 HTML） -->
                 <div
-                    class="prose-body text-[15px] leading-relaxed text-[var(--text-main)]"
-                    style="font-family: Georgia, 'Noto Serif SC', serif; line-height: 1.9;"
+                    class="prose-body text-[var(--text-main)]"
                     v-html="story.proseHtml"
                 />
 
@@ -153,27 +152,74 @@ function handleSelectTick(tickId: string): void {
 </template>
 
 <style scoped>
-/* prose 正文排版 */
-.prose-body :deep(p) {
-    margin: 0 0 1em;
+/*
+ * prose 正文排版
+ * 只作用于 Markdown 生成的元素，内联 HTML <div> 不受影响
+ */
+.prose-body {
+    font-size: 15px;
+    line-height: 1.9;
+    font-family: Georgia, 'Noto Serif SC', serif;
 }
-.prose-body :deep(p:last-child) {
-    margin-bottom: 0;
+
+/* 标题层级 */
+.prose-body :deep(h1) { font-size: 1.6em; font-weight: 700; margin: 1.2em 0 0.6em; line-height: 1.4; }
+.prose-body :deep(h2) { font-size: 1.35em; font-weight: 600; margin: 1em 0 0.5em; line-height: 1.4; }
+.prose-body :deep(h3) { font-size: 1.15em; font-weight: 600; margin: 0.8em 0 0.4em; line-height: 1.4; }
+
+/* 段落 */
+.prose-body :deep(p) { margin: 0 0 1em; }
+.prose-body :deep(p:last-child) { margin-bottom: 0; }
+
+/* 内联语义 */
+.prose-body :deep(em) { font-style: italic; }
+.prose-body :deep(strong) { font-weight: 700; }
+.prose-body :deep(code) {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.88em;
+    background: rgba(127,127,127,0.1);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
 }
-.prose-body :deep(em) {
-    font-style: italic;
+.prose-body :deep(pre) {
+    margin: 1em 0;
+    padding: 1em;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.08);
+    overflow-x: auto;
+    font-size: 0.85em;
+    line-height: 1.5;
 }
-.prose-body :deep(strong) {
-    font-weight: 600;
+.prose-body :deep(pre code) {
+    background: none;
+    padding: 0;
+    font-size: inherit;
 }
+
+/* 列表 */
+.prose-body :deep(ul), .prose-body :deep(ol) { margin: 0.5em 0 1em; padding-left: 1.5em; }
+.prose-body :deep(li) { margin-bottom: 0.3em; }
+
+/* 引用 */
 .prose-body :deep(blockquote) {
     margin: 1em 0;
     padding: 0.5em 1em;
     border-left: 3px solid var(--border-color);
     color: var(--text-secondary);
 }
+
+/* 表格 */
+.prose-body :deep(table) { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.9em; }
+.prose-body :deep(th), .prose-body :deep(td) {
+    border: 1px solid var(--border-color);
+    padding: 0.4em 0.8em;
+    text-align: left;
+}
+.prose-body :deep(th) { background: rgba(127,127,127,0.06); font-weight: 600; }
+
+/* 分割线 */
 .prose-body :deep(hr) {
-    margin: 1.5em 0;
+    margin: 2em 0;
     border: none;
     text-align: center;
 }
@@ -182,4 +228,10 @@ function handleSelectTick(tickId: string): void {
     color: var(--text-muted);
     opacity: 0.4;
 }
+
+/* 图片 */
+.prose-body :deep(img) { max-width: 100%; border-radius: 6px; margin: 0.5em 0; }
+
+/* 链接 */
+.prose-body :deep(a) { color: var(--accent-main); text-decoration: underline; }
 </style>
