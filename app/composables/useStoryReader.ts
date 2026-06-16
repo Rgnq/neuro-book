@@ -130,11 +130,10 @@ export function useStoryReader() {
             // 优先使用 frontmatter.title，其次 tick 自身的 title，最后回退到 slug
             title.value = frontmatter.title || tick.title || tick.id;
 
+            // renderMarkdown 基于 Marked v17，原生透传 HTML 标签，
+            // Markdown + HTML 混排无需额外检测，统一交由 marked 处理
             const trimmed = body.trim();
-            // 格式检测：HTML 或 Markdown
-            const isHtml = /^<\s*\w+/.test(trimmed);
-            const rawHtml = isHtml ? trimmed : renderMarkdown(trimmed);
-            proseHtml.value = rawHtml;
+            proseHtml.value = trimmed ? renderMarkdown(trimmed) : "";
 
             // 更新 store 状态
             mobileUi.currentTickId = tickId;
