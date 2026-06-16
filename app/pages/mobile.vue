@@ -11,6 +11,7 @@ import MobileEditorToolbar from "nbook/app/components/mobile/MobileEditorToolbar
 import MobileFileBrowser from "nbook/app/components/mobile/MobileFileBrowser.vue";
 import AgentChatSurface from "nbook/app/components/novel-ide/agent/AgentChatSurface.vue";
 import TipTapMarkdownEditor from "nbook/app/components/markdown-studio/TipTapMarkdownEditor.vue";
+import Dialog from "nbook/app/components/common/Dialog.vue";
 import type { MarkdownFormatCommand, MarkdownStudioEditorHandle } from "nbook/app/composables/useMarkdownStudioController";
 import type { DropdownItem } from "nbook/app/components/common/dropdown.types";
 import type { AuthSessionDto } from "nbook/shared/dto/auth.dto";
@@ -36,15 +37,11 @@ const agentSurfaceRef = ref<InstanceType<typeof AgentChatSurface> | null>(null);
 const editorRef = ref<MarkdownStudioEditorHandle | null>(null);
 const currentUser = ref<AuthSessionDto["user"]>(null);
 
+// ---------- 弹窗状态 ----------
+const novelDialogOpen = ref(false);
+
 // ---------- Agent Session 状态 ----------
-/** 从 AgentChatSurface 读取的 session 列表（通过 defineExpose 暴露） */
-const mobileSessions = computed(() => agentSurfaceRef.value?.sessions ?? []);
-
-/** 从 AgentChatSurface 读取的当前 active session ID */
-const mobileActiveSessionId = computed(() => agentSurfaceRef.value?.activeSessionId ?? null);
-
-/** 从 AgentChatSurface 读取的 session 加载状态 */
-const mobileLoadingSession = computed(() => agentSurfaceRef.value?.loadingSession ?? false);
+const hasActiveSession = computed(() => agentSurfaceRef.value?.activeSessionId != null);
 
 // ---------- Auth ----------
 /**
@@ -100,15 +97,15 @@ async function handleSwitchNovel(novelId: string): Promise<void> {
     await novelIdeStore.switchNovel(novelId);
 }
 
-// ---------- Session 操作 ----------
-/** 选择 Session */
-function handleSelectSession(sessionId: number): void {
-    agentSurfaceRef.value?.selectSession(sessionId);
+// ---------- Header 按钮 ----------
+/** 打开小说选择弹窗 */
+function handleOpenNovels(): void {
+    novelDialogOpen.value = true;
 }
 
-/** 创建新 Session */
-async function handleCreateSession(): Promise<void> {
-    await agentSurfaceRef.value?.createSession();
+/** 打开会话管理弹窗（复用 AgentChatSurface 内部的 AgentSessionDialog） */
+function handleOpenSessions(): void {
+    agentSurfaceRef.value?.openSessionDialog();
 }
 
 // ---------- 编辑器 ----------
@@ -139,14 +136,10 @@ async function handleOpenEditor(path: string): Promise<void> {
     >
         <!-- 顶栏 -->
         <MobileHeader
-            :novel-items="novelItems"
             :novel-title="novelTitle"
-            :sessions="mobileSessions"
-            :active-session-id="mobileActiveSessionId"
-            :loading-session="mobileLoadingSession"
-            @switch-novel="handleSwitchNovel"
-            @select-session="handleSelectSession"
-            @create-session="handleCreateSession"
+            :has-active-session="hasActiveSession"
+            @open-novels="handleOpenNovels"
+            @open-sessions="handleOpenSessions"
         />
 
         <!-- Tab 内容区 — v-show 保持各 Tab 挂载不销毁 -->
@@ -196,6 +189,29 @@ async function handleOpenEditor(path: string): Promise<void> {
             @select="mobileUi.setActiveTab"
         />
     </div>
+
+    <!-- 小说选择弹窗 -->
+    <Dialog
+        v-model="novelDialogOpen"
+        title="选择小说"
+        size="mobile-fullscreen"
+        :show-footer="false"
+    >
+        <div class="flex flex-col gap-0.5">
+            <button
+                v-for="item in novelItems"
+                :key="item.value"
+                type="button"
+                class="flex items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13px] transition-colors active:bg-[var(--bg-hover)]"
+                :class="item.active ? 'text-[var(--accent-main)] font-medium' : 'text-[var(--text-main)]'"
+                @click="handleSwitchNovel(item.value); novelDialogOpen = false"
+            >
+                <span class="i-lucide-book-open h-4 w-4 shrink-0 text-[var(--text-muted)]"></span>
+                <span class="min-w-0 truncate font-serif italic">{{ item.label }}</span>
+                <span v-if="item.active" class="i-lucide-check h-4 w-4 shrink-0 ml-auto text-[var(--accent-main)]"></span>
+            </button>
+        </div>
+    </Dialog>
 
     <!-- 非移动端占位 -->
     <div v-else class="flex h-screen items-center justify-center bg-[var(--bg-main)] text-[var(--text-muted)] text-[14px]">

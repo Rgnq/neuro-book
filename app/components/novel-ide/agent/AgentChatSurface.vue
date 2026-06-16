@@ -1690,6 +1690,7 @@ defineExpose({
     inlineEditorSessionLabel,
     sessionActionId,
     ensureSessionReady,
+    openSessionDialog,
     refreshSessionsWithQuery,
     selectSession,
     createSession: createSessionFromHeader,
