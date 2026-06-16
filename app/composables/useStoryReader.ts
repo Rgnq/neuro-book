@@ -66,19 +66,24 @@ export function useStoryReader() {
         }
 
         try {
-            // 通过 workspace tree API 列出 ticks 目录
+            // 服务器不支持 target/depth 过滤，请求完整 workspace tree 后在客户端筛选
             console.log("[useStoryReader] loadTickList projectPath:", projectPath);
-            const tree = await $fetch<{ nodes?: Array<{ path: string; isDirectory: boolean; title?: string }> }>(
+            const tree = await $fetch<{ nodes?: Array<{ path: string; isDirectory: boolean; title?: string; mtimeMs?: number }> }>(
                 "/api/workspace-files/tree",
-                { query: { projectPath, target: "simulation/runs/ticks", depth: 1 } }
+                { query: { projectPath } }
             );
-            console.log("[useStoryReader] tree response:", JSON.stringify(tree));
+            console.log("[useStoryReader] tree node count:", tree.nodes?.length ?? 0);
 
+            // 筛选 simulation/runs/ticks/ 下的直接子目录
             const dirs = (tree.nodes ?? [])
-                .filter(n => n.isDirectory)
+                .filter(n => {
+                    if (!n.isDirectory) return false;
+                    // 去掉尾部 /，检查父路径是否为 simulation/runs/ticks
+                    const clean = n.path.replace(/\/$/, "");
+                    const parent = clean.replace(/\/[^/]+$/, "");
+                    return parent === "simulation/runs/ticks";
+                })
                 .map(n => {
-                    // toWorkspaceDisplayPath 对目录返回尾部带 / 的路径，
-                    // 需先去除再提取最后一段作为目录名
                     const cleanPath = n.path.replace(/\/$/, "");
                     const id = cleanPath.split("/").pop() ?? cleanPath;
                     const match = id.match(/^(\d+)/);
@@ -92,7 +97,7 @@ export function useStoryReader() {
                 })
                 .sort((a, b) => a.numericId - b.numericId);
 
-            console.log("[useStoryReader] parsed dirs:", JSON.stringify(dirs));
+            console.log("[useStoryReader] parsed tick dirs:", JSON.stringify(dirs.map(d => d.id)));
             ticks.value = dirs;
         } catch (err) {
             console.error("[useStoryReader] loadTickList error:", err);
