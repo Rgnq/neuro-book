@@ -3,6 +3,16 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 /** 移动端最大宽度断点（与 UnoCSS md 断点一致） */
 export const MOBILE_BREAKPOINT = 768;
 
+/** 纯函数：检测 User-Agent 是否为移动设备（不依赖 Vue 生命周期） */
+export function checkMobileUA(userAgent: string): boolean {
+    return /Mobi|Android|iPhone|iPad|iPod/i.test(userAgent);
+}
+
+/** 纯函数：检测视口宽度是否为移动端 */
+export function checkMobileViewport(innerWidth: number): boolean {
+    return innerWidth <= MOBILE_BREAKPOINT;
+}
+
 /**
  * 设备检测 composable。
  * 使用 UA 嗅探 + matchMedia + resize 事件，提供响应式的 isMobile 状态。
@@ -22,7 +32,7 @@ export function useMobileDetect() {
     /** UA 嗅探：检测移动设备标识 */
     function detectUA(): boolean {
         if (typeof navigator === "undefined") return false;
-        return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        return checkMobileUA(navigator.userAgent);
     }
 
     /** matchMedia change 事件处理函数（保存引用以便移除） */
