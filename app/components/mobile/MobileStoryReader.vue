@@ -14,7 +14,8 @@ const props = defineProps<{
 }>();
 
 const mobileUi = useMobileUiStore();
-const story = useStoryReader();
+/** reactive 包裹确保模板中 ref 自动解包 */
+const story = reactive(useStoryReader());
 
 // 初始化：切到剧情页时加载 tick 列表
 watch(() => mobileUi.activeTab, async (tab) => {
