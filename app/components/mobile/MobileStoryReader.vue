@@ -1,30 +1,18 @@
 <!-- app/components/mobile/MobileStoryReader.vue -->
 <script setup lang="ts">
 import MobileStoryTimeline from "nbook/app/components/mobile/MobileStoryTimeline.vue";
-import AgentChatSurface from "nbook/app/components/novel-ide/agent/AgentChatSurface.vue";
+import MobileStoryComposer from "nbook/app/components/mobile/MobileStoryComposer.vue";
 import { useStoryReader } from "nbook/app/composables/useStoryReader";
 import { useMobileUiStore } from "nbook/app/stores/mobile-ui";
 
 const props = defineProps<{
     novelId: string | null;
-    selectedFilePath: string | null;
+    /** 回调：获取当前 Agent 会话 ID */
+    getSessionId: () => number | null;
 }>();
 
 const mobileUi = useMobileUiStore();
 const story = useStoryReader();
-
-/** AgentChatSurface 引用（用于会话管理） */
-const agentSurfaceRef = ref<InstanceType<typeof AgentChatSurface> | null>(null);
-
-/** 暴露 openSessionDialog 给 mobile.vue */
-defineExpose({
-    get activeSessionId() {
-        return agentSurfaceRef.value?.activeSessionId;
-    },
-    openSessionDialog() {
-        agentSurfaceRef.value?.openSessionDialog();
-    },
-});
 
 // 初始化：切到剧情页时加载 tick 列表
 watch(() => mobileUi.activeTab, async (tab) => {
@@ -154,15 +142,9 @@ function handleSelectTick(tickId: string): void {
             </article>
         </div>
 
-        <!-- 底部 Agent 对话输入（共享会话） -->
-        <div class="shrink-0 border-t border-[var(--border-color)]" style="max-height: 220px;">
-            <AgentChatSurface
-                ref="agentSurfaceRef"
-                :active="true"
-                layout="mobile"
-                :novel-id="props.novelId"
-                :selected-file-path="props.selectedFilePath"
-            />
+        <!-- 底部剧情对话框（通过回调读取聊天页 Agent 会话） -->
+        <div class="shrink-0 border-t border-[var(--border-color)] bg-[var(--bg-panel)]">
+            <MobileStoryComposer :get-session-id="props.getSessionId" />
         </div>
     </div>
 </template>

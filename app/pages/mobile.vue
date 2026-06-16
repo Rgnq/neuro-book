@@ -35,8 +35,6 @@ const authSessionState = useAuthSessionState();
 
 const themeHostRef = ref<HTMLElement | null>(null);
 const agentSurfaceRef = ref<InstanceType<typeof AgentChatSurface> | null>(null);
-/** 剧情页引用 */
-const storyReaderRef = ref<InstanceType<typeof MobileStoryReader> | null>(null);
 const editorRef = ref<MarkdownStudioEditorHandle | null>(null);
 const currentUser = ref<AuthSessionDto["user"]>(null);
 
@@ -45,8 +43,12 @@ const novelDialogOpen = ref(false);
 const settingsDialogOpen = ref(false);
 
 // ---------- Agent Session 状态 ----------
-const hasActiveSession = computed(() => agentSurfaceRef.value?.activeSessionId != null
-    || storyReaderRef.value?.activeSessionId != null);
+const hasActiveSession = computed(() => agentSurfaceRef.value?.activeSessionId != null);
+
+/** 获取当前 Agent 会话 ID（供剧情页发送时实时读取） */
+function getAgentSessionId(): number | null {
+    return agentSurfaceRef.value?.activeSessionId ?? null;
+}
 
 // ---------- Auth ----------
 /**
@@ -168,9 +170,8 @@ function handleCloseFile(): void {
             <!-- 剧情 Tab -->
             <div v-show="mobileUi.activeTab === 'story'" class="flex h-full flex-col">
                 <MobileStoryReader
-                    ref="storyReaderRef"
                     :novel-id="currentNovelId"
-                    :selected-file-path="selectedFilePath"
+                    :get-session-id="getAgentSessionId"
                 />
             </div>
 
