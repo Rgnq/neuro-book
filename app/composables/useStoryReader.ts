@@ -1,4 +1,4 @@
-import { marked } from "marked";
+import { renderMarkdown } from "nbook/app/utils/markdown/render";
 import { useNovelIdeStore } from "nbook/app/stores/novel-ide";
 import { useMobileUiStore } from "nbook/app/stores/mobile-ui";
 
@@ -90,6 +90,7 @@ export function useStoryReader() {
             ticks.value = dirs;
         } catch {
             ticks.value = [];
+            error.value = "加载章节列表失败";
         }
     }
 
@@ -105,7 +106,7 @@ export function useStoryReader() {
 
         try {
             const projectPath = novelIdeStore.currentNovelId;
-            if (!projectPath) return;
+            if (!projectPath) { error.value = "未选择项目"; return; }
 
             const { content } = await $fetch<{ content: string }>("/api/workspace-files/read", {
                 query: { projectPath, path: tick.prosePath },
@@ -118,7 +119,7 @@ export function useStoryReader() {
             const trimmed = body.trim();
             // 格式检测：HTML 或 Markdown
             const isHtml = /^<\s*\w+/.test(trimmed);
-            const rawHtml = isHtml ? trimmed : await marked.parse(trimmed);
+            const rawHtml = isHtml ? trimmed : renderMarkdown(trimmed);
             proseHtml.value = rawHtml;
 
             // 更新 store 状态
@@ -187,6 +188,7 @@ export function useStoryReader() {
  * 支持 `---\nkey: value\n---\nbody` 格式。
  */
 function parseFrontmatter(raw: string): { frontmatter: Record<string, string>; body: string } {
+    raw = raw.replace(/\r\n/g, "\n");
     const match = raw.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/);
     if (!match) return { frontmatter: {}, body: raw };
 
