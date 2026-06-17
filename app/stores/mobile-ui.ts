@@ -4,6 +4,9 @@ import { defineStore } from "pinia";
 /** 移动端底部标签页类型 */
 export type MobileTab = "chat" | "story" | "editor" | "files";
 
+/** 编辑器视图模式 */
+export type EditorViewMode = "rich" | "source";
+
 /**
  * 移动端 UI 状态 store。
  * 管理底部标签栏的激活 tab、编辑器状态及剧情页状态。
@@ -20,6 +23,9 @@ export const useMobileUiStore = defineStore("mobile-ui", () => {
 
     /** 剧情页：时间线侧栏是否可见 */
     const timelineVisible = ref(false);
+
+    /** 编辑器视图模式：rich（所见即所得） | source（源码） */
+    const editorViewMode = ref<EditorViewMode>("rich");
 
     /** 切换底部标签 */
     function setActiveTab(tab: MobileTab): void {
@@ -48,15 +54,22 @@ export const useMobileUiStore = defineStore("mobile-ui", () => {
         timelineVisible.value = visible;
     }
 
+    /** 切换编辑器视图模式 */
+    function setEditorViewMode(mode: EditorViewMode): void {
+        editorViewMode.value = mode;
+    }
+
     return {
         activeTab,
         editorFilePath,
         currentTickId,
         timelineVisible,
+        editorViewMode,
         setActiveTab,
         openFileInEditor,
         openTick,
         toggleTimeline,
         setTimelineVisible,
+        setEditorViewMode,
     };
 });

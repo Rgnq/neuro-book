@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { storeToRefs } from "pinia";
 import { useNovelIdeStore } from "nbook/app/stores/novel-ide";
-import { useMobileUiStore, type MobileTab } from "nbook/app/stores/mobile-ui";
+import { useMobileUiStore, type EditorViewMode, type MobileTab } from "nbook/app/stores/mobile-ui";
 import { useMobileDetect } from "nbook/app/composables/useMobileDetect";
 import { useIdeTheme } from "nbook/app/composables/useIdeTheme";
 import { useAuthSessionState } from "nbook/app/composables/useAuthSessionState";
@@ -144,6 +144,9 @@ function handleOpenSessions(): void {
 }
 
 // ---------- 编辑器 ----------
+/** 编辑器警告信息（HTML 检测等） */
+const editorWarning = ref<string | null>(null);
+
 /** 用户编辑后的内容先写到 store buffer，后续通过 store 保存 */
 function handleEditorChange(value: string): void {
     selectedFileContent.value = value;
@@ -154,11 +157,41 @@ function handleFormat(command: MarkdownFormatCommand): void {
     editorRef.value?.applyMarkdownFormat?.(command);
 }
 
+/**
+ * TipTap / 标准 Markdown 能无损往返的标签。
+ * 此列表之外的 HTML 标签在 rich 模式下编辑并保存后会被破坏。
+ */
+const EDITOR_SAFE_TAGS = new Set([
+    "p", "h1", "h2", "h3", "h4", "h5", "h6",
+    "ul", "ol", "li", "blockquote", "code", "pre",
+    "em", "strong", "b", "i", "u", "s", "del",
+    "a", "img", "table", "thead", "tbody", "tr", "th", "td",
+    "hr", "br", "sub", "sup", "mark",
+    "inline-comment",
+]);
+
+/** 检测 Markdown 文本是否包含编辑器无法安全处理的 HTML 标签 */
+function hasRiskyHtml(content: string): boolean {
+    const tags = content.matchAll(/<(\w[\w-]*)(?:\s[^>]*)?>/gi);
+    for (const m of tags) {
+        if (!EDITOR_SAFE_TAGS.has(m[1].toLowerCase())) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /** 文件浏览器点击"在编辑器中打开" */
 async function handleOpenEditor(path: string): Promise<void> {
-    // 加载文件内容到 store
+    editorWarning.value = null;
     await novelIdeStore.selectWorkspacePath(path);
     mobileUi.openFileInEditor(path);
+
+    // 检测文件是否包含编辑器无法安全处理的 HTML 标签
+    if (hasRiskyHtml(selectedFileContent.value)) {
+        mobileUi.setEditorViewMode("source");
+        editorWarning.value = "此文件包含自定义 HTML 样式代码，已自动切换到源码模式。在 Markdown 模式下编辑会破坏这些 HTML。";
+    }
 }
 
 /** 保存当前编辑的文件 */
@@ -174,6 +207,14 @@ async function handleSaveFile(): Promise<void> {
 function handleCloseFile(): void {
     novelIdeStore.clearActiveFile();
     mobileUi.editorFilePath = null;
+}
+
+/** 切换编辑器视图模式（rich ↔ source） */
+function handleToggleEditorView(): void {
+    const next: EditorViewMode = mobileUi.editorViewMode === "rich" ? "source" : "rich";
+    mobileUi.setEditorViewMode(next);
+    // 切到源码模式时清除 HTML 警告
+    if (next === "source") editorWarning.value = null;
 }
 </script>
 
@@ -217,7 +258,12 @@ function handleCloseFile(): void {
 
             <!-- 编辑 Tab -->
             <div v-show="mobileUi.activeTab === 'editor'" class="flex h-full flex-col">
-                <MobileEditorToolbar @format="handleFormat" />
+                <!-- 格式工具栏（仅 rich 模式显示格式按钮，两模式均可切换） -->
+                <MobileEditorToolbar
+                    :view-mode="mobileUi.editorViewMode"
+                    @format="handleFormat"
+                    @toggle-view="handleToggleEditorView"
+                />
                 <!-- 文件信息 + 保存/关闭 -->
                 <div
                     v-if="selectedFilePath"
@@ -246,14 +292,31 @@ function handleCloseFile(): void {
                         <span>关闭</span>
                     </button>
                 </div>
+                <!-- HTML 风险警告 -->
+                <div
+                    v-if="editorWarning"
+                    class="flex shrink-0 items-start gap-2 border-b border-[var(--border-color)] bg-[var(--accent-bg)] px-3 py-2 text-[12px] leading-relaxed text-[var(--accent-main)]"
+                >
+                    <span class="i-lucide-triangle-alert h-3.5 w-3.5 shrink-0 mt-px" />
+                    <span class="flex-1">{{ editorWarning }}</span>
+                    <button
+                        type="button"
+                        class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--text-muted)] transition-colors active:bg-[var(--bg-hover)]"
+                        @click="editorWarning = null"
+                    >
+                        <span class="i-lucide-x h-3.5 w-3.5" />
+                    </button>
+                </div>
+                <!-- 编辑器主区域 -->
                 <div class="flex-1 overflow-hidden">
                     <div v-if="!selectedFilePath" class="flex h-full items-center justify-center text-[var(--text-muted)] text-[13px]">
                         从「文件」标签页选择文件开始编辑
                     </div>
-                    <div v-else class="h-full overflow-y-auto">
+                    <!-- Rich 模式：WYSIWYG -->
+                    <div v-else-if="mobileUi.editorViewMode === 'rich'" class="h-full overflow-y-auto">
                         <TipTapMarkdownEditor
                             ref="editorRef"
-                            :key="selectedFilePath"
+                            :key="selectedFilePath + '-rich'"
                             :initial-value="selectedFileContent"
                             :visible="true"
                             :readonly="false"
@@ -262,6 +325,16 @@ function handleCloseFile(): void {
                             @change="handleEditorChange"
                         />
                     </div>
+                    <!-- Source 模式：纯文本编辑 -->
+                    <textarea
+                        v-else
+                        :value="selectedFileContent"
+                        class="h-full w-full resize-none border-0 bg-[var(--bg-main)] p-4 text-[13px] leading-relaxed text-[var(--text-main)] outline-none"
+                        style="font-family: 'JetBrains Mono', 'Fira Code', monospace; tab-size: 2;"
+                        spellcheck="false"
+                        placeholder="开始写作..."
+                        @input="handleEditorChange(($event.target as HTMLTextAreaElement).value)"
+                    />
                 </div>
             </div>
 

@@ -1,13 +1,15 @@
 <!-- app/components/mobile/MobileEditorToolbar.vue -->
 <script setup lang="ts">
 import type { MarkdownFormatCommand } from "nbook/app/composables/useMarkdownStudioController";
+import type { EditorViewMode } from "nbook/app/stores/mobile-ui";
 
-/**
- * 移动端精简格式工具栏。
- * 横向滚动，命令与 TipTapMarkdownEditor 的 applyMarkdownFormat 对齐。
- */
+defineProps<{
+    viewMode: EditorViewMode;
+}>();
+
 const emit = defineEmits<{
     (e: "format", command: MarkdownFormatCommand): void;
+    (e: "toggle-view"): void;
 }>();
 
 const tools: { command: MarkdownFormatCommand; icon: string }[] = [
@@ -25,16 +27,29 @@ const tools: { command: MarkdownFormatCommand; icon: string }[] = [
 </script>
 
 <template>
-    <!-- 移动端格式工具栏 — 横向滚动 -->
-    <div class="mobile-editor-toolbar flex shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--border-color)] bg-[var(--bg-panel)] px-2 py-1.5">
+    <!-- 移动端格式工具栏 -->
+    <div class="mobile-editor-toolbar flex shrink-0 items-center border-b border-[var(--border-color)] bg-[var(--bg-panel)]">
+        <!-- 左侧：格式按钮（横向滚动） -->
+        <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2 py-1.5">
+            <button
+                v-for="tool in tools"
+                :key="tool.command"
+                type="button"
+                class="flex h-7 min-w-[28px] shrink-0 items-center justify-center rounded px-1.5 text-[12px] text-[var(--text-secondary)] transition-colors active:bg-[var(--bg-hover)] active:text-[var(--text-main)]"
+                @click="emit('format', tool.command)"
+            >
+                <span :class="tool.icon" class="h-3.5 w-3.5"></span>
+            </button>
+        </div>
+        <!-- 右侧：Markdown / 源码 切换 -->
         <button
-            v-for="tool in tools"
-            :key="tool.command"
             type="button"
-            class="flex h-7 min-w-[28px] shrink-0 items-center justify-center rounded px-1.5 text-[12px] text-[var(--text-secondary)] transition-colors active:bg-[var(--bg-hover)] active:text-[var(--text-main)]"
-            @click="emit('format', tool.command)"
+            class="flex shrink-0 items-center gap-1 border-l border-[var(--border-color)] px-3 py-1.5 text-[11px] font-medium text-[var(--text-secondary)] transition-colors active:bg-[var(--bg-hover)]"
+            @click="emit('toggle-view')"
         >
-            <span :class="tool.icon" class="h-3.5 w-3.5"></span>
+            <span v-if="viewMode === 'rich'" class="i-lucide-code-2 h-3.5 w-3.5" />
+            <span v-else class="i-lucide-eye h-3.5 w-3.5" />
+            <span>{{ viewMode === "rich" ? "源码" : "预览" }}</span>
         </button>
     </div>
 </template>

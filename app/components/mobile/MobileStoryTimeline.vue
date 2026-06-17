@@ -52,6 +52,7 @@ watch(() => props.visible, (v) => {
         <aside
             v-if="visible"
             class="fixed left-0 top-0 z-30 flex h-full w-56 flex-col border-r border-[var(--border-color)] bg-[var(--bg-panel)] shadow-lg"
+            style="padding-top: var(--safe-area-top); padding-bottom: var(--safe-area-bottom)"
         >
             <!-- 侧栏标题 -->
             <div class="flex shrink-0 items-center justify-between border-b border-[var(--border-color)] px-4 py-3">

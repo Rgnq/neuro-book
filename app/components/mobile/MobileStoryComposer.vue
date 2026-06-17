@@ -6,6 +6,7 @@ import { useStructuredReferenceMenu } from "nbook/app/composables/useStructuredR
 import { useAgentSessionApi } from "nbook/app/composables/useAgentSessionApi";
 import { useNovelIdeStore } from "nbook/app/stores/novel-ide";
 import { useNotification } from "nbook/app/composables/useNotification";
+import { useMobileUiStore } from "nbook/app/stores/mobile-ui";
 
 const props = defineProps<{
     /** 回调：获取当前 Agent 会话 ID */
@@ -16,6 +17,7 @@ const props = defineProps<{
 
 const agentApi = useAgentSessionApi();
 const notification = useNotification();
+const mobileUi = useMobileUiStore();
 
 const inputText = ref("");
 const sending = ref(false);
@@ -88,7 +90,6 @@ async function handleStop(): Promise<void> {
 
 /** 切换到聊天页 */
 function goToChat(): void {
-    const mobileUi = useMobileUiStore();
     mobileUi.setActiveTab("chat");
 }
 </script>

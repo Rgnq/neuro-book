@@ -14,19 +14,16 @@ const props = defineProps<{
 }>();
 
 const mobileUi = useMobileUiStore();
-/** reactive 包裹确保模板中 ref 自动解包 */
+/**
+ * reactive() 包裹是必需的：useStoryReader 返回的 ref 嵌套在普通对象中，
+ * 模板的 v-if / :disabled 等指令不会自动解包嵌套 ref，导致 Ref 对象永远 truthy。
+ * reactive() deep-unwrap 使 story.totalTicks 在模板中表现为原始值类型。
+ */
 const story = reactive(useStoryReader());
 
-// 初始化：切到剧情页时加载 tick 列表
-watch(() => mobileUi.activeTab, async (tab) => {
-    if (tab === "story" && props.novelId) {
-        // 首次进入或 novel 切换时重新加载
-        await story.init(mobileUi.currentTickId ?? undefined);
-    }
-});
-
-// 首次挂载时如果已在剧情页则初始化
-onMounted(async () => {
+// 切到剧情页时、novelId 变化时自动加载 tick 列表；
+// watchEffect 自动追踪 activeTab / novelId，合并了原来的 watch + onMounted
+watchEffect(async () => {
     if (mobileUi.activeTab === "story" && props.novelId) {
         await story.init(mobileUi.currentTickId ?? undefined);
     }
@@ -66,7 +63,7 @@ function handleSelectTick(tickId: string): void {
                 <button
                     type="button"
                     class="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors active:bg-[var(--bg-hover)] disabled:pointer-events-none disabled:opacity-25"
-                    :disabled="!story.hasPrev"
+                    :disabled="!story.hasPrev || story.loading"
                     @click="story.goPrev()"
                 >
                     <span class="i-lucide-chevron-left h-4 w-4" />
@@ -74,7 +71,7 @@ function handleSelectTick(tickId: string): void {
                 <button
                     type="button"
                     class="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors active:bg-[var(--bg-hover)] disabled:pointer-events-none disabled:opacity-25"
-                    :disabled="!story.hasNext"
+                    :disabled="!story.hasNext || story.loading"
                     @click="story.goNext()"
                 >
                     <span class="i-lucide-chevron-right h-4 w-4" />

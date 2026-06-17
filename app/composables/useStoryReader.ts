@@ -5,6 +5,30 @@ import { useMobileUiStore } from "nbook/app/stores/mobile-ui";
 /** 专用于 prose 阅读的 Marked 实例：GFM + breaks，无聊天泡自定义扩展 */
 const proseMarked = new Marked({ gfm: true, breaks: true });
 
+/** DOMPurify 实例（惰性初始化，避免 SSR 下 window is not defined） */
+let _purifier: ((html: string) => string) | null = null;
+async function getPurifier(): Promise<(html: string) => string> {
+    if (!_purifier) {
+        const createDOMPurify = (await import("dompurify")).default;
+        const purify = createDOMPurify(window);
+        // 放行 NeuroBook 自定义元素 <inline-comment body="..." id="...">text</inline-comment>
+        purify.addHook("uponSanitizeElement", (node, data) => {
+            if (data.tagName === "inline-comment") {
+                data.allowedTags["inline-comment"] = true;
+                for (let i = node.attributes.length - 1; i >= 0; i--) {
+                    const name = node.attributes[i].name;
+                    if (name !== "body" && name !== "id") {
+                        node.removeAttribute(name);
+                    }
+                }
+            }
+        });
+        // 裸调用 sanitize()，不传 per-call config，走完整默认白名单
+        _purifier = (html: string) => purify.sanitize(html) as string;
+    }
+    return _purifier;
+}
+
 /** tick 条目信息 */
 export interface TickEntry {
     /** 目录名，如 "001-arrival" */
@@ -129,9 +153,16 @@ export function useStoryReader() {
             title.value = frontmatter.title || tick.title || tick.id;
 
             // 使用 prose 专用 Marked 实例（无聊天泡自定义扩展），
-            // normalizeMultilineHtml 压缩跨行 HTML 确保正确识别
+            // normalizeMultilineHtml 压缩跨行 HTML 确保正确识别，
+            // 再经 DOMPurify 清洗：放行标准 HTML + inline-comment，剥离 script/onerror 等
             const trimmed = body.trim();
-            proseHtml.value = trimmed ? await proseMarked.parse(normalizeMultilineHtml(trimmed)) : "";
+            if (trimmed) {
+                const rawHtml = await proseMarked.parse(normalizeMultilineHtml(trimmed));
+                const purifier = await getPurifier();
+                proseHtml.value = purifier(rawHtml);
+            } else {
+                proseHtml.value = "";
+            }
 
             // 更新 store 状态
             mobileUi.currentTickId = tickId;
@@ -145,16 +176,16 @@ export function useStoryReader() {
         }
     }
 
-    /** 跳转到上一章 */
+    /** 跳转到上一章（loading 中忽略点击，防止并发的竞态请求） */
     function goPrev(): void {
-        if (!hasPrev.value) return;
+        if (!hasPrev.value || loading.value) return;
         const prev = ticks.value[currentIndex.value - 1];
         if (prev) void loadTick(prev.id);
     }
 
-    /** 跳转到下一章 */
+    /** 跳转到下一章（loading 中忽略点击，防止并发的竞态请求） */
     function goNext(): void {
-        if (!hasNext.value) return;
+        if (!hasNext.value || loading.value) return;
         const next = ticks.value[currentIndex.value + 1];
         if (next) void loadTick(next.id);
     }
@@ -200,8 +231,9 @@ export function useStoryReader() {
  * 例如 `<div style="\n  color: red;\n">` → `<div style=" color: red; ">`
  */
 function normalizeMultilineHtml(html: string): string {
-    // 匹配 <tag ... > 形式的跨行标签（属性跨行时 Marked 无法识别）
-    return html.replace(/<(\w+)([^>]*?)>/gs, (_full, tag, attrs) => {
+    // 匹配 <tag ... > 形式的跨行标签（属性跨行时 Marked 无法识别）。
+    // [\w-]+ 支持连字符，如 <inline-comment> 等自定义元素。
+    return html.replace(/<([\w-]+)([^>]*?)>/gs, (_full, tag, attrs) => {
         // 跳过 <pre> 和 <code>：内部空白是有意义的内容
         if (tag === "pre" || tag === "code") return _full;
         const compact = attrs.replace(/\s+/g, " ").trim();
@@ -224,7 +256,12 @@ function parseFrontmatter(raw: string): { frontmatter: Record<string, string>; b
     for (const line of lines) {
         const kv = line.match(/^(\w[\w-]*)\s*:\s*(.+)/);
         if (kv) {
-            frontmatter[kv[1]] = kv[2].trim().replace(/^["']|["']$/g, "");
+            let val = kv[2].trim();
+            // 去除首尾成对引号（支持双引号/单引号包裹的值，如 title: "Chapter 1: Arrival"）
+            if ((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))) {
+                val = val.slice(1, -1);
+            }
+            frontmatter[kv[1]] = val;
         }
     }
     return { frontmatter, body };
