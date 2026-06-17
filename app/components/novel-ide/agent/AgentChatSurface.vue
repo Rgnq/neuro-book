@@ -46,7 +46,7 @@ const INLINE_EDITOR_PROFILE_KEY = "inline.editor";
 
 const props = defineProps<{
     active: boolean;
-    layout: "drawer" | "workbench" | "mobile";
+    layout: "drawer" | "workbench";
     novelId: string;
     selectedFilePath?: string;
     /** 打开消息 Markdown 中的 workspace 引用。 */
@@ -1800,15 +1800,11 @@ function isApprovalApproved(answer?: {
     <!-- Agent Chat Surface -->
     <section
         class="flex h-full min-h-0 min-w-0 flex-col bg-[var(--bg-panel)]"
-        :class="[
-            props.layout === 'workbench' ? 'border-x border-[var(--border-color)]' : '',
-            props.layout === 'mobile' ? 'border-0' : '',
-            props.active ? '' : 'pointer-events-none opacity-0',
-        ]"
+        :class="[props.layout === 'workbench' ? 'border-x border-[var(--border-color)]' : '', props.active ? '' : 'pointer-events-none opacity-0']"
         :aria-hidden="!props.active"
     >
-        <!-- 抽屉头部 — 移动端隐藏（由 MobileHeader 替代） -->
-        <div v-if="props.layout !== 'mobile'" class="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border-color)] bg-[var(--bg-panel)] px-4 py-3">
+        <!-- 抽屉头部 -->
+            <div class="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border-color)] bg-[var(--bg-panel)] px-4 py-3">
                 <div class="min-w-0 flex items-center gap-2">
                     <div class="flex h-6 w-6 items-center justify-center rounded border border-[var(--accent-main)] bg-[var(--accent-bg)]">
                         <span class="h-3.5 w-3.5" :class="drawerIconClass"></span>

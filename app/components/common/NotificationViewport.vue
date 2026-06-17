@@ -163,12 +163,4 @@ function badgeToneClass(item: NotificationItem): string {
 .nb-notification-move {
     transition: transform 0.22s ease;
 }
-
-/* 移动端通知定位修正 — 避开刘海和底部指示条 */
-@media (max-width: 768px) {
-    .notification-group {
-        padding-top: var(--safe-area-top);
-        padding-bottom: var(--safe-area-bottom);
-    }
-}
 </style>

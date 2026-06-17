@@ -34,21 +34,6 @@ function resolveVendorChunk(id: string): string | undefined {
 
 export default defineNuxtConfig({
     ssr: false,
-    app: {
-        head: {
-            meta: [
-                { name: "viewport", content: "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" },
-                { name: "apple-mobile-web-app-capable", content: "yes" },
-                { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
-                { name: "theme-color", content: "#1a1a2e" },
-            ],
-            link: [
-                { rel: "manifest", href: "/manifest.json" },
-                { rel: "apple-touch-icon", sizes: "180x180", href: "/icon.svg" },
-                { rel: "icon", type: "image/svg+xml", href: "/icon.svg" },
-            ],
-        },
-    },
     alias: {
         nbook: rootDir,
     },
@@ -57,7 +42,6 @@ export default defineNuxtConfig({
             entries: [
                 "./app/app.vue",
                 "./app/pages/index.vue",
-                "./app/pages/mobile.vue",
             ],
             include: [
                 "@dnd-kit/dom",
