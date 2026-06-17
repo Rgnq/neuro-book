@@ -89,8 +89,8 @@ useHead({
     ],
     link: [
         { rel: "manifest", href: "/manifest.json" },
-        { rel: "apple-touch-icon", sizes: "180x180", href: "/icon.svg" },
-        { rel: "icon", type: "image/svg+xml", href: "/icon.svg" },
+        { rel: "apple-touch-icon", sizes: "180x180", href: "/mobile/icon.svg" },
+        { rel: "icon", type: "image/svg+xml", href: "/mobile/icon.svg" },
     ],
     style: [
         {

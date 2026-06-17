@@ -10,7 +10,7 @@
     "lang": "zh-CN",
     "icons": [
         {
-            "src": "/icon.svg",
+            "src": "/mobile/icon.svg",
             "sizes": "any",
             "type": "image/svg+xml",
             "purpose": "any"
