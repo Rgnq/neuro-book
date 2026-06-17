@@ -96,12 +96,6 @@ useHead({
         {
             id: "mobile-safe-area",
             children: `
-:root {
-    --safe-area-top: env(safe-area-inset-top, 0px);
-    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
-    --safe-area-left: env(safe-area-inset-left, 0px);
-    --safe-area-right: env(safe-area-inset-right, 0px);
-}
 @media (max-width: 768px) {
     .notification-group {
         padding-top: var(--safe-area-top);
@@ -373,5 +367,27 @@ function handleToggleEditorView(): void {
  */
 .mobile-chat-surface :deep(section > div:first-child) {
     display: none;
+}
+</style>
+
+<style>
+/*
+ * 移动端安全区 CSS 变量 & Dialog 适配。
+ * 必须放在非 scoped <style> 块中走 Vite CSS 打包管线，
+ * 不能依赖 useHead 动态注入——iOS Safari 在页面交互后可能丢失动态 <style> 标签。
+ */
+:root {
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
+}
+
+/* Dialog 弹窗避开 iOS 顶部安全区 */
+@media (max-width: 768px) {
+    .fixed.inset-0.z-\[9000\] {
+        padding-top: var(--safe-area-top);
+        padding-bottom: var(--safe-area-bottom);
+    }
 }
 </style>
