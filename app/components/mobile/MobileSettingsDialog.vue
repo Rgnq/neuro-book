@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { storeToRefs } from "pinia";
 import { useNovelIdeStore } from "nbook/app/stores/novel-ide";
+import { useMobileUiStore } from "nbook/app/stores/mobile-ui";
 import type { SelectOption } from "nbook/app/components/common/form/FormSelect.vue";
 import Dialog from "nbook/app/components/common/Dialog.vue";
 import FormSelect from "nbook/app/components/common/form/FormSelect.vue";
@@ -24,6 +25,7 @@ const emit = defineEmits<{
 }>();
 
 const novelIdeStore = useNovelIdeStore();
+const mobileUi = useMobileUiStore();
 const {
     theme,
     viewMode,
@@ -32,6 +34,7 @@ const {
     markdownEditorPreferences,
     monacoEditorPreferences,
 } = storeToRefs(novelIdeStore);
+const { showStatusPanel } = storeToRefs(mobileUi);
 
 const activeSection = ref<SettingsSection | null>(null);
 const activeScope = ref<SettingsScope>("global");
@@ -301,6 +304,33 @@ const monacoFontOptions: SelectOption[] = [
                     <div class="flex items-center justify-between rounded-lg border border-[var(--border-color)] px-3 py-2.5">
                         <span class="text-[12px] text-[var(--text-main)]">Prompt Bar</span>
                         <FormSelect :model-value="promptExpandedValue" :options="promptExpandedOptions" class="w-32" @update:model-value="promptExpandedValue = $event" />
+                    </div>
+                    <!-- 剧情状态栏开关 -->
+                    <div class="rounded-lg border border-[var(--border-color)] px-3 py-2.5">
+                        <div class="flex items-center justify-between">
+                            <label class="flex min-w-0 flex-1 items-center gap-2" for="toggle-status-panel">
+                                <span class="text-[12px] text-[var(--text-main)]">显示剧情状态栏</span>
+                            </label>
+                            <button
+                                id="toggle-status-panel"
+                                type="button"
+                                role="switch"
+                                :aria-checked="showStatusPanel"
+                                class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors"
+                                :class="showStatusPanel ? 'bg-[var(--accent-main)]' : 'bg-[var(--border-color)]'"
+                                @click="showStatusPanel = !showStatusPanel"
+                            >
+                                <span
+                                    class="inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform"
+                                    :class="showStatusPanel ? 'translate-x-[18px]' : 'translate-x-[3px]'"
+                                />
+                            </button>
+                        </div>
+                        <div class="mt-1.5 text-[10px] leading-relaxed text-[var(--text-muted)]">
+                            模板目录：simulation/runs/status-panels/<br>
+                            数据文件：simulation/runs/ticks/&#123;id&#125;-&#123;slug&#125;/status-data.json<br>
+                            模板使用 <code v-pre>{{key}}</code> 占位，data 字段提供值。缺少模板或数据时静默跳过。
+                        </div>
                     </div>
                 </div>
 

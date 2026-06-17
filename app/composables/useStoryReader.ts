@@ -58,6 +58,9 @@ export function useStoryReader() {
     /** 当前渲染后的 prose HTML */
     const proseHtml = ref("");
 
+    /** 状态栏 HTML（模板+数据组装，与 proseHtml 分离以避免 watchEffect 重入导致重复） */
+    const statusHtml = ref("");
+
     /** 当前 prose 的标题（frontmatter.title 或 slug） */
     const title = ref("");
 
@@ -167,12 +170,56 @@ export function useStoryReader() {
             // 更新 store 状态
             mobileUi.currentTickId = tickId;
             currentIndex.value = ticks.value.findIndex(t => t.id === tickId);
+
+            // 加载状态栏（模板 + 数据组装），失败不影响正文显示。
+            // 独立 ref 而非拼入 proseHtml，防止 watchEffect 重入时重复追加。
+            statusHtml.value = await loadStatusPanel(projectPath, tickId);
         } catch (err) {
             console.error("[useStoryReader] loadTick error:", err);
             error.value = "加载章节内容失败";
             proseHtml.value = "";
+            statusHtml.value = "";
         } finally {
             loading.value = false;
+        }
+    }
+
+    /**
+     * 加载状态栏 HTML。
+     * 从 tick 目录读取 status-data.json → 获取模板 → 替换 {{key}} → 返回 HTML。
+     * 任一环节失败返回空字符串，不阻断正文渲染。
+     */
+    async function loadStatusPanel(projectPath: string, tickId: string): Promise<string> {
+        if (!mobileUi.showStatusPanel) return "";
+
+        try {
+            // ① 读取 status-data.json
+            const statusPath = `simulation/runs/ticks/${tickId}/status-data.json`;
+            const { content: rawJson } = await $fetch<{ content: string }>("/api/workspace-files/read", {
+                query: { projectPath, path: statusPath },
+            });
+            const parsed = JSON.parse(rawJson) as { panel?: string; data?: Record<string, unknown> };
+            if (!parsed.panel || !parsed.data || Object.keys(parsed.data).length === 0) return "";
+
+            // ② 读取模板 HTML
+            const templatePath = `simulation/runs/status-panels/${parsed.panel}.html`;
+            const { content: template } = await $fetch<{ content: string }>("/api/workspace-files/read", {
+                query: { projectPath, path: templatePath },
+            });
+
+            // ③ 替换 {{key}} → data[key]，未提供的 key 保留原文占位
+            const filled = template.replace(/\{\{(\w+)\}\}/g, (_full, key: string) => {
+                const val = parsed.data![key];
+                return val !== undefined ? String(val) : _full;
+            });
+
+            return filled;
+        } catch (err) {
+            // 404 或解析失败：静默跳过，状态栏不是正文的一部分
+            if (!(err instanceof TypeError)) { // TypeError 通常是网络问题，不打印
+                console.warn("[useStoryReader] loadStatusPanel skipped:", (err as Error).message);
+            }
+            return "";
         }
     }
 
@@ -213,6 +260,7 @@ export function useStoryReader() {
         currentTick,
         totalTicks,
         proseHtml,
+        statusHtml,
         title,
         loading,
         error,

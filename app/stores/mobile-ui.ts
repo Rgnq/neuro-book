@@ -27,6 +27,9 @@ export const useMobileUiStore = defineStore("mobile-ui", () => {
     /** 编辑器视图模式：rich（所见即所得） | source（源码） */
     const editorViewMode = ref<EditorViewMode>("rich");
 
+    /** 剧情页：是否显示状态栏（模板+数据组装） */
+    const showStatusPanel = ref(true);
+
     /** 切换底部标签 */
     function setActiveTab(tab: MobileTab): void {
         activeTab.value = tab;
@@ -59,17 +62,24 @@ export const useMobileUiStore = defineStore("mobile-ui", () => {
         editorViewMode.value = mode;
     }
 
+    /** 切换剧情状态栏显示 */
+    function setShowStatusPanel(show: boolean): void {
+        showStatusPanel.value = show;
+    }
+
     return {
         activeTab,
         editorFilePath,
         currentTickId,
         timelineVisible,
         editorViewMode,
+        showStatusPanel,
         setActiveTab,
         openFileInEditor,
         openTick,
         toggleTimeline,
         setTimelineVisible,
         setEditorViewMode,
+        setShowStatusPanel,
     };
 });

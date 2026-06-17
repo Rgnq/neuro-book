@@ -134,6 +134,12 @@ function handleSelectTick(tickId: string): void {
                     v-html="story.proseHtml"
                 />
 
+                <!-- 状态栏（模板+数据组装，独立于正文渲染） -->
+                <div
+                    v-if="story.statusHtml"
+                    v-html="story.statusHtml"
+                />
+
                 <!-- 章节分隔符 -->
                 <div class="mt-10 text-center text-[var(--text-muted)] opacity-40">
                     &#8274;
