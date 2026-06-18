@@ -24,6 +24,7 @@ import type {
     AgentProfileVariableGroupDto,
 } from "nbook/shared/dto/agent-profile.dto";
 import {reportResultSchemaForProfile, reportSidecarResultSchemaForProfile} from "nbook/server/agent/profiles/report-result-schema";
+import {resolveRuntimeProfileSettings} from "nbook/server/agent/profiles/profile-settings";
 import type {ProfileTemplateNodeDto} from "nbook/shared/dto/profile-template.dto";
 import {buildProfilePromptRoot} from "nbook/server/agent/profiles/profile-dsl-source-parser";
 
@@ -113,11 +114,19 @@ export async function previewAgentProfilePrepare(
     const session = createProfilePreviewSessionFacade(harness, request.profileKey, initial, previewSnapshot, sessionContext);
     const catalog = await harness.profiles.snapshot();
     const skills = await harness.skills.list();
+    const effectiveConfig = await loadPreviewEffectiveConfig(sessionContext);
+    const settings = await resolveRuntimeProfileSettings(profile, effectiveConfig.agent.profiles[request.profileKey]?.settings, {
+        profileKey: request.profileKey,
+        scope: sessionContext.projectPath ? "project" : "global",
+        workspaceRoot: sessionContext.workspaceRoot,
+        ...(sessionContext.projectPath ? {projectPath: sessionContext.projectPath} : {}),
+    });
 
     try {
         const prepared = await profile.prepare!({
             session,
             initial,
+            settings: settings as never,
             vars: createProfileVariableAccessor({
                 repo: harness.repo,
                 snapshot: previewSnapshot ?? previewSessionSnapshot(request.profileKey, sessionContext),
@@ -517,6 +526,17 @@ function previewSessionSnapshot(profileKey: string, session: NeuroSessionContext
         entries: [],
         leafId: null,
     };
+}
+
+/**
+ * 工作台 prepare 预览应尽量复用真实运行的 profile settings。
+ */
+async function loadPreviewEffectiveConfig(session: Pick<NeuroSessionContext, "workspaceRoot" | "projectPath">) {
+    const {loadEffectiveConfigForAgentRuntime} = await import("nbook/server/config/config-service");
+    return loadEffectiveConfigForAgentRuntime({
+        workspaceRoot: session.workspaceRoot,
+        ...(session.projectPath ? {projectPath: session.projectPath} : {}),
+    });
 }
 
 function cloneJsonObject(value: unknown): Record<string, JsonValue> | null {

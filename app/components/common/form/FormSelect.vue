@@ -86,7 +86,7 @@ const selectOption = (opt: SelectOption) => {
             <div
                 v-if="open"
                 ref="panelRef"
-                class="absolute left-0 right-0 z-[60] overflow-y-auto rounded-md border border-[var(--border-color)] bg-[var(--bg-panel)] p-1.5 shadow-xl custom-scrollbar"
+                class="absolute left-0 right-0 z-[9200] overflow-y-auto rounded-md border border-[var(--border-color)] bg-[var(--bg-panel)] p-1.5 shadow-xl custom-scrollbar"
                 :class="resolvedDirection === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'"
                 :style="panelStyle"
             >

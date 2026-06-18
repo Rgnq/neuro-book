@@ -4,6 +4,8 @@ import path from "node:path";
 import {createError} from "h3";
 import {useAgentHarness} from "nbook/server/agent/http";
 import type {AgentProfileCatalog} from "nbook/server/agent/profiles/catalog";
+import type {AgentCatalogItem} from "nbook/server/agent/profiles/types";
+import {resolveProfileSettings} from "nbook/server/agent/profiles/profile-settings";
 import {
     USER_ASSETS_WORKSPACE_KIND,
     USER_ASSETS_WORKSPACE_ROOT,
@@ -28,6 +30,7 @@ import {CONFIG_REGISTRY, CONFIG_VERSION} from "nbook/server/config/registry";
 import {
     normalizeAgentProfileModelConfig,
     normalizeAgentProfiles,
+    normalizeAgentProfileSettings,
     normalizeEmbeddingModelConfig,
     normalizeEmbeddingService,
     normalizeGlobalConfig,
@@ -47,6 +50,12 @@ import type {
     StoredProjectConfig,
     StoredProviderConfig,
 } from "nbook/server/config/types";
+import {
+    resolveLowCodeForm,
+    validateLowCodeFormValue,
+    type LowCodeFormResolveContext,
+} from "nbook/server/low-code-form";
+import type {LowCodeJsonObject} from "nbook/shared/dto/low-code-form.dto";
 import {
     buildModelLabel,
     listEnabledModels,
@@ -89,10 +98,14 @@ export async function readConfigEditorSnapshot(
         meta: CONFIG_REGISTRY,
         modelSettings: buildConfigModelSettingsDto(effective),
         embeddingSettings: buildConfigEmbeddingSettingsDto(global, project, effective),
-        agentProfileSettings: buildConfigAgentProfileSettingsDto(effective, catalog.profiles.map((profile) => ({
-            profileKey: profile.key,
-            name: profile.name,
-        }))),
+        agentProfileSettings: await buildConfigAgentProfileSettingsDto({
+            effective,
+            global,
+            project,
+            profiles,
+            catalogProfiles: catalog.profiles,
+            query,
+        }),
         defaultProfileSettings: buildDefaultProfileSettingsDto({
             workspaceKind: target.workspaceKind,
             projectConfigAvailable: Boolean(target.projectConfigPath),
@@ -131,7 +144,12 @@ export async function readConfigBootstrap(
 /**
  * 保存 Global Config。secret value 缺失时保留原值。
  */
-export async function saveGlobalConfig(input: GlobalConfigDto, query: ConfigWorkspaceQueryDto): Promise<ConfigEditorSnapshotDto> {
+export async function saveGlobalConfig(
+    input: GlobalConfigDto,
+    query: ConfigWorkspaceQueryDto,
+    profiles: AgentProfileCatalog = useAgentHarness().profiles,
+): Promise<ConfigEditorSnapshotDto> {
+    await assertProfileSettingsInput(input.agent?.profiles, query, profiles);
     const current = await readGlobalConfigFile();
     const next = normalizeGlobalConfig({
         ...current,
@@ -144,13 +162,17 @@ export async function saveGlobalConfig(input: GlobalConfigDto, query: ConfigWork
         ...(input.embedding !== undefined ? {embedding: normalizeGlobalEmbeddingForWrite(input.embedding, current)} : {}),
     });
     await writeJsonFile(GLOBAL_CONFIG_PATH, next);
-    return readConfigEditorSnapshot(query);
+    return readConfigEditorSnapshot(query, profiles);
 }
 
 /**
  * 保存 Project Config。包含 global-only 字段时直接拒绝。
  */
-export async function saveProjectConfig(input: ProjectConfigDto, query: ConfigWorkspaceQueryDto): Promise<ConfigEditorSnapshotDto> {
+export async function saveProjectConfig(
+    input: ProjectConfigDto,
+    query: ConfigWorkspaceQueryDto,
+    profiles: AgentProfileCatalog = useAgentHarness().profiles,
+): Promise<ConfigEditorSnapshotDto> {
     const target = await resolveConfigTarget(query);
     if (!target.projectConfigPath) {
         throw createError({
@@ -159,8 +181,10 @@ export async function saveProjectConfig(input: ProjectConfigDto, query: ConfigWo
         });
     }
     assertProjectConfigDoesNotContainGlobalOnly(input);
+    const global = await readGlobalConfigFile();
+    await assertProfileSettingsInput(input.agent?.profiles, query, profiles, global.agent?.profiles);
     await writeJsonFile(target.projectConfigPath, normalizeProjectConfig(input as StoredProjectConfig));
-    return readConfigEditorSnapshot(query);
+    return readConfigEditorSnapshot(query, profiles);
 }
 
 /**
@@ -402,21 +426,119 @@ function buildConfigEmbeddingSettingsDto(
     };
 }
 
-function buildConfigAgentProfileSettingsDto(
-    effective: EffectiveConfig,
-    profileDefinitions: Array<{profileKey: string; name: string}>,
-): ConfigAgentProfileSettingsDto {
+async function buildConfigAgentProfileSettingsDto(input: {
+    effective: EffectiveConfig;
+    global: StoredGlobalConfig;
+    project: StoredProjectConfig | null;
+    profiles: AgentProfileCatalog;
+    catalogProfiles: AgentCatalogItem[];
+    query: ConfigWorkspaceQueryDto;
+}): Promise<ConfigAgentProfileSettingsDto> {
     return {
-        enabledModels: listEnabledModels(effective.models),
-        profileModelDefaults: normalizeAgentProfileModelConfig(effective.agent.profileModelDefaults),
-        agentProfiles: profileDefinitions.map((definition) => ({
-            profileKey: definition.profileKey,
+        enabledModels: listEnabledModels(input.effective.models),
+        profileModelDefaults: normalizeAgentProfileModelConfig(input.effective.agent.profileModelDefaults),
+        agentProfiles: await Promise.all(input.catalogProfiles.map(async (definition) => ({
+            profileKey: definition.key,
             name: definition.name,
             model: normalizeAgentProfileModelConfig({
-                ...effective.agent.profileModelDefaults,
-                ...(effective.agent.profiles[definition.profileKey]?.model ?? {}),
+                ...input.effective.agent.profileModelDefaults,
+                ...(input.effective.agent.profiles[definition.key]?.model ?? {}),
             }),
-        })),
+            settings: await buildProfileSettingsDto(input, definition),
+        }))),
+    };
+}
+
+/**
+ * 构造单个 profile 的 settings 编辑 DTO。
+ */
+async function buildProfileSettingsDto(input: {
+    effective: EffectiveConfig;
+    global: StoredGlobalConfig;
+    project: StoredProjectConfig | null;
+    profiles: AgentProfileCatalog;
+    query: ConfigWorkspaceQueryDto;
+}, definition: AgentCatalogItem): Promise<ConfigAgentProfileSettingsDto["agentProfiles"][number]["settings"]> {
+    if (definition.loadStatus !== "loaded") {
+        return null;
+    }
+    const profile = await input.profiles.get(definition.key).catch(() => null);
+    if (!profile?.settingsForm) {
+        return null;
+    }
+    const ctx = lowCodeFormContext(definition.key, input.query);
+    const effectivePatch = normalizeAgentProfileSettings(input.effective.agent.profiles[definition.key]?.settings);
+    const globalPatch = normalizeAgentProfileSettings(input.global.agent?.profiles?.[definition.key]?.settings);
+    const projectPatch = normalizeAgentProfileSettings(input.project?.agent?.profiles?.[definition.key]?.settings);
+    const resolution = await resolveProfileSettings(profile, effectivePatch, ctx);
+    const inheritedResolution = await resolveProfileSettings(profile, input.project ? globalPatch : {}, ctx);
+    return {
+        form: await resolveLowCodeForm(profile.settingsForm, ctx),
+        value: resolution.value,
+        inheritedValue: inheritedResolution.value,
+        effectivePatch,
+        globalPatch,
+        projectPatch,
+        issues: resolution.issues,
+    };
+}
+
+/**
+ * 校验写入请求里的 profile settings patch。
+ */
+async function assertProfileSettingsInput(
+    profilesInput: Record<string, {settings?: LowCodeJsonObject}> | undefined,
+    query: ConfigWorkspaceQueryDto,
+    profiles: AgentProfileCatalog,
+    inheritedProfilesInput?: Record<string, {settings?: LowCodeJsonObject}>,
+): Promise<void> {
+    if (!profilesInput) {
+        return;
+    }
+    for (const [profileKey, profileConfig] of Object.entries(profilesInput)) {
+        if (profileConfig.settings === undefined) {
+            continue;
+        }
+        const profile = await profiles.get(profileKey).catch(() => null);
+        if (!profile?.settingsForm) {
+            if (Object.keys(profileConfig.settings).length === 0) {
+                continue;
+            }
+            throw createError({
+                statusCode: 400,
+                message: `profile ${profileKey} 未声明 settingsForm，不能保存 settings。`,
+            });
+        }
+        const settingsForValidation = inheritedProfilesInput
+            ? {
+                ...normalizeAgentProfileSettings(inheritedProfilesInput[profileKey]?.settings),
+                ...normalizeAgentProfileSettings(profileConfig.settings),
+            }
+            : profileConfig.settings;
+        const result = await validateLowCodeFormValue(
+            profile.settingsForm,
+            settingsForValidation,
+            lowCodeFormContext(profileKey, query),
+        );
+        const error = result.issues.find((issue) => issue.severity === "error");
+        if (error) {
+            throw createError({
+                statusCode: 400,
+                message: `profile ${profileKey} settings 校验失败：${error.message}`,
+            });
+        }
+    }
+}
+
+/**
+ * 根据 Config query 构造低代码 form 解析上下文。
+ */
+function lowCodeFormContext(profileKey: string, query: ConfigWorkspaceQueryDto): LowCodeFormResolveContext {
+    return {
+        profileKey,
+        scope: query.workspaceKind === "novel" ? "project" : "global",
+        workspaceRoot: query.workspaceKind === "novel" ? WORKSPACE_CONTAINER_ROOT : USER_ASSETS_WORKSPACE_ROOT,
+        ...(query.projectPath ? {projectPath: query.projectPath} : {}),
     };
 }
 

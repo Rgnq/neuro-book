@@ -52,6 +52,7 @@ import {assertValidProfileStateWrite, compilePrepareRunWritePlan} from "nbook/se
 import {toRunKernelErrorInfo, withRunKernelPhase} from "nbook/server/agent/harness/run-kernel-error";
 import {consumeNextTurnModelMessages, createRunFrame} from "nbook/server/agent/harness/run-frame-state";
 import {isEmptyObjectSchema, reportResultSchemaForProfile, reportSidecarResultSchemaForProfile} from "nbook/server/agent/profiles/report-result-schema";
+import {resolveRuntimeProfileSettings} from "nbook/server/agent/profiles/profile-settings";
 import {resolvePiApiKeyForModelFromConfig, resolvePiModelFromConfig} from "nbook/server/agent/harness/model-resolver";
 import {planModeDirectory, resolvePlanModeFile} from "nbook/server/agent/plan-mode-path";
 import type {EffectiveConfig} from "nbook/server/config/types";
@@ -1843,6 +1844,8 @@ export class NeuroAgentHarness {
         const profile = await this.profiles.get(snapshot.metadata.profileKey);
         const context = this.repo.reduce(snapshot);
         const parsedInitial = this.profiles.parseInitial(profile, snapshot.metadata.initial);
+        const config = await loadEffectiveConfig(context);
+        const settings = await this.resolveProfileSettings(profile, config, context);
         const session = this.createRuntimeSessionFacade({
             sessionId: snapshot.metadata.sessionId,
             profileKey: profile.manifest.key,
@@ -1860,6 +1863,7 @@ export class NeuroAgentHarness {
                 caller: options.caller,
             },
             vars,
+            settings: settings as never,
             catalog: await this.profiles.snapshot(),
             skills: await this.skills.list(),
             runtime: {
@@ -2736,6 +2740,8 @@ export class NeuroAgentHarness {
         const snapshot = await this.repo.readSession(frame.sessionId, frame.workspaceKey);
         const context = this.repo.reduce(snapshot);
         const parsedInitial = this.profiles.parseInitial(frame.profile, snapshot.metadata.initial);
+        const config = await loadEffectiveConfig(context);
+        const settings = await this.resolveProfileSettings(frame.profile, config, context);
         const prepared = await frame.profile.prepare({
             session: this.createRuntimeSessionFacade({
                 sessionId: frame.sessionId,
@@ -2744,6 +2750,7 @@ export class NeuroAgentHarness {
                 context,
             }),
             initial: parsedInitial as never,
+            settings: settings as never,
             vars: await this.createProfileVariableAccessor(snapshot, frame.profile, {dryRun: true}),
             catalog: await this.profiles.snapshot(),
             skills: await this.skills.list(),
@@ -3740,6 +3747,26 @@ export class NeuroAgentHarness {
             return context.thinkingLevel;
         }
         return config.agent.profiles[context.profileKey]?.model.reasoningEffort ?? config.agent.profileModelDefaults.reasoningEffort ?? "off";
+    }
+
+    /**
+     * 解析当前 profile 的 settings，运行时遇到坏配置时回退 profile defaults。
+     */
+    private async resolveProfileSettings(
+        profile: AgentProfile,
+        config: Pick<EffectiveConfig, "agent">,
+        context: Pick<NeuroSessionContext, "profileKey" | "workspaceRoot" | "projectPath">,
+    ): Promise<Record<string, JsonValue>> {
+        return resolveRuntimeProfileSettings(
+            profile,
+            config.agent.profiles[context.profileKey]?.settings,
+            {
+                profileKey: context.profileKey,
+                scope: context.projectPath ? "project" : "global",
+                workspaceRoot: context.workspaceRoot,
+                ...(context.projectPath ? {projectPath: context.projectPath} : {}),
+            },
+        );
     }
 
     private piStreamOptions(requestOptions: Record<string, JsonValue> | undefined): Record<string, unknown> {

@@ -12,6 +12,7 @@ import {JsonlSessionRepository} from "nbook/server/agent/session/session-repo";
 import {defineAgentProfile as defineRuntimeAgentProfile} from "nbook/server/agent/profiles/define-agent-profile";
 import {agentRuntimeBuiltins, defineAgentRuntime} from "nbook/server/agent/profiles/define-agent-runtime";
 import {builtin, defineProfileTool, pluginTool, toolset} from "nbook/server/agent/profiles/profile-tools";
+import {defineLowCodeForm} from "nbook/server/low-code-form";
 import type {ProfileTools} from "nbook/server/agent/profiles/profile-tools";
 import {profileToolsFromKeys} from "nbook/server/agent/test/profile-tools";
 import type {AgentCatalogSnapshot, AgentProfile, AgentProfileDefinition, SidecarProfilePass} from "nbook/server/agent/profiles/types";
@@ -35,7 +36,7 @@ type LegacyTestProfile<
     TOutputSchema extends TSchema = TSchema,
     TSummarizerKey extends string = string,
     TTools extends ProfileTools = ProfileTools,
-> = Omit<AgentProfileDefinition<TInitialSchema, TPayloadSchema, TOutputSchema, TSummarizerKey, TTools>, "tools" | "toolKeys" | "sidecars"> & {
+> = Omit<AgentProfileDefinition<TInitialSchema, TPayloadSchema, TOutputSchema, undefined, TSummarizerKey, TTools>, "tools" | "toolKeys" | "sidecars"> & {
     tools?: ProfileTools;
     allowedToolKeys?: readonly string[];
     mainRunAllowedToolKeys?: readonly string[];
@@ -77,7 +78,7 @@ function defineAgentProfile<
         tools: rest.tools ?? profileToolsFromKeys(migratedAllowedToolKeys),
         toolKeys: toolKeys ?? mainRunAllowedToolKeys,
         // 测试 helper 只做旧字段到新字段的机械迁移，最终运行时校验仍由 defineRuntimeAgentProfile 负责。
-        sidecars: migratedSidecars as AgentProfileDefinition<TInitialSchema, TPayloadSchema, TOutputSchema, TSummarizerKey, TTools>["sidecars"],
+        sidecars: migratedSidecars as AgentProfileDefinition<TInitialSchema, TPayloadSchema, TOutputSchema, undefined, TSummarizerKey, TTools>["sidecars"],
     });
 }
 
@@ -1819,6 +1820,87 @@ describe("NeuroAgentHarness", () => {
 
         expect(result.status).toBe("completed");
         expect(observedReasoning).toBe("high");
+    });
+
+    it("profile settings 会在每次 prepare 读取最新 effective config", async () => {
+        await mkdir(join(root, ".nbook"), {recursive: true});
+        await writeFile(join(root, ".nbook", "config.json"), JSON.stringify({
+            agent: {
+                profiles: {
+                    "test.settings": {
+                        settings: {
+                            tone: "cinematic",
+                        },
+                    },
+                },
+            },
+        }, null, 4), "utf8");
+        const SettingsSchema = Type.Object({
+            tone: Type.String(),
+        }, {additionalProperties: false});
+        const SettingsForm = defineLowCodeForm({
+            schema: SettingsSchema,
+            defaults: {
+                tone: "plain",
+            },
+            fields: [{
+                path: "tone",
+                component: "select",
+                label: "语气",
+                options: [
+                    {value: "plain", label: "平实"},
+                    {value: "cinematic", label: "电影感"},
+                    {value: "lyrical", label: "抒情"},
+                ],
+            }],
+        });
+        const observedTones: string[] = [];
+        harness.profiles.register(defineRuntimeAgentProfile({
+            manifest: {
+                key: "test.settings",
+                name: "Settings",
+            },
+            initialSchema: Type.Object({}),
+            settingsForm: SettingsForm,
+            tools: toolset(),
+            prepare(ctx) {
+                observedTones.push(ctx.settings.tone);
+                return {};
+            },
+        }), false);
+        faux.setResponses([
+            fauxAssistantMessage(fauxText("first")),
+            fauxAssistantMessage(fauxText("second")),
+        ]);
+        const created = await harness.createAgent({
+            profileKey: "test.settings",
+            initial: {},
+            workspaceRoot: root,
+        });
+
+        await harness.invokeAgent({
+            sessionId: created.sessionId,
+            mode: "prompt",
+            message: {text: "run first"},
+        });
+        await writeFile(join(root, ".nbook", "config.json"), JSON.stringify({
+            agent: {
+                profiles: {
+                    "test.settings": {
+                        settings: {
+                            tone: "lyrical",
+                        },
+                    },
+                },
+            },
+        }, null, 4), "utf8");
+        await harness.invokeAgent({
+            sessionId: created.sessionId,
+            mode: "prompt",
+            message: {text: "run second"},
+        });
+
+        expect(observedTones).toEqual(["cinematic", "lyrical"]);
     });
 
     it("session thinking 覆盖能显式关闭并回到 profile 默认", async () => {

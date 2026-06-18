@@ -53,7 +53,7 @@ type LegacyTestProfile<
     TOutputSchema extends TSchema = TSchema,
     TSummarizerKey extends string = string,
     TTools extends ProfileTools = ProfileTools,
-> = Omit<AgentProfileDefinition<TInitialSchema, TSchema, TOutputSchema, TSummarizerKey, TTools>, "tools" | "toolKeys" | "sidecars"> & {
+> = Omit<AgentProfileDefinition<TInitialSchema, TSchema, TOutputSchema, undefined, TSummarizerKey, TTools>, "tools" | "toolKeys" | "sidecars"> & {
     tools?: ProfileTools;
     allowedToolKeys?: readonly string[];
     mainRunAllowedToolKeys?: readonly string[];
@@ -88,7 +88,7 @@ function defineAgentProfile<
                 ...sidecarRest,
                 toolKeys: sidecarRest.toolKeys ?? sidecarAllowedToolKeys,
             };
-        }) as AgentProfileDefinition<TInitialSchema, TSchema, TOutputSchema, TSummarizerKey, TTools>["sidecars"],
+        }) as AgentProfileDefinition<TInitialSchema, TSchema, TOutputSchema, undefined, TSummarizerKey, TTools>["sidecars"],
     });
 }
 

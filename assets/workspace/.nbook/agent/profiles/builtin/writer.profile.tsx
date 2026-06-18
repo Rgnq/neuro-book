@@ -1,15 +1,16 @@
 /** @jsxImportSource nbook/server/agent/profiles/profile-dsl */
 /** @jsxRuntime automatic */
 import {isAbsolute, posix} from "node:path";
-import type {Static} from "typebox";
+import {Type, type Static} from "typebox";
 import {defineAgentProfile} from "nbook/server/agent/profiles/define-agent-profile";
 import {builtin, toolset} from "nbook/server/agent/profiles/profile-tools";
 import {WriterInitialSchema, WriterOutputSchema, WriterPayloadSchema} from "nbook/server/agent/profiles/builtin-contracts";
 import {AppendingSet, HistorySet, If, Import, Message, ProfilePrompt, System} from "nbook/server/agent/profiles/profile-dsl";
 import type {ProfilePrepareContext} from "nbook/server/agent/profiles/types";
 import {profileText} from "nbook/server/agent/profiles/profile-text";
-import {buildWritingReference} from "nbook/server/agent/profiles/writer-writing-reference";
-import {buildWritingStyle} from "nbook/server/agent/profiles/writer-writing-style";
+import {DEFAULT_WRITING_REFERENCE_PRESET, buildWritingReference, loadWritingReferencePresets} from "nbook/server/agent/profiles/writer-writing-reference";
+import {DEFAULT_WRITING_STYLE_PRESET, buildWritingStyle, loadWritingStylePresets} from "nbook/server/agent/profiles/writer-writing-style";
+import {defineLowCodeForm} from "nbook/server/low-code-form";
 import {normalizeProjectPath, readProjectManifest} from "nbook/server/workspace-files/project-workspace";
 
 const ENABLE_KITTEN_ADULT_STYLE = false;
@@ -23,10 +24,83 @@ export const profileManifest = {
 export const InitialSchema = WriterInitialSchema;
 export const PayloadSchema = WriterPayloadSchema;
 export const OutputSchema = WriterOutputSchema;
+export const SettingsSchema = Type.Object({
+    writingStylePreset: Type.String(),
+    writingReferencePreset: Type.String(),
+    narrativePerson: Type.Union([
+        Type.Literal("first"),
+        Type.Literal("second"),
+        Type.Literal("third"),
+    ]),
+}, {additionalProperties: false});
 
 export type Initial = Static<typeof InitialSchema>;
 export type Payload = Static<typeof PayloadSchema>;
 export type Output = Static<typeof OutputSchema>;
+export type Settings = Static<typeof SettingsSchema>;
+
+export const WriterSettingsForm = defineLowCodeForm({
+    schema: SettingsSchema,
+    defaults: {
+        writingStylePreset: DEFAULT_WRITING_STYLE_PRESET,
+        writingReferencePreset: DEFAULT_WRITING_REFERENCE_PRESET,
+        narrativePerson: "third",
+    },
+    fields: [
+        {
+            path: "writingStylePreset",
+            component: "combobox",
+            label: "文风预设",
+            placeholder: "选择默认文风",
+            async options() {
+                const styles = await loadWritingStylePresets();
+                return styles.map((style) => ({
+                    value: style.key,
+                    label: style.label,
+                    description: style.sourceFile,
+                }));
+            },
+        },
+        {
+            path: "writingReferencePreset",
+            component: "combobox",
+            label: "文风参考",
+            placeholder: "选择默认参考样本",
+            async options() {
+                const references = await loadWritingReferencePresets();
+                return references.map((reference) => ({
+                    value: reference.key,
+                    label: reference.label,
+                    description: reference.sourceFile,
+                }));
+            },
+        },
+        {
+            path: "narrativePerson",
+            component: "radio",
+            label: "默认人称",
+            options: [
+                {value: "third", label: "第三人称"},
+                {value: "first", label: "第一人称"},
+                {value: "second", label: "第二人称"},
+            ],
+        },
+    ],
+    async validate(value) {
+        const [styles, references] = await Promise.all([
+            loadWritingStylePresets(),
+            loadWritingReferencePresets(),
+        ]);
+        const issues: Array<{path: string; severity: "error"; message: string}> = [];
+        if (!styles.some((style) => style.key === value.writingStylePreset)) {
+            issues.push({path: "writingStylePreset", severity: "error" as const, message: "选择的文风预设不存在。"});
+        }
+        if (!references.some((reference) => reference.key === value.writingReferencePreset)) {
+            issues.push({path: "writingReferencePreset", severity: "error" as const, message: "选择的文风参考不存在。"});
+        }
+        return issues;
+    },
+});
 
 type WriterPayloadTarget = {
     path: string;
@@ -40,6 +114,7 @@ export default defineAgentProfile({
     initialSchema: InitialSchema,
     payloadSchema: PayloadSchema,
     outputSchema: OutputSchema,
+    settingsForm: WriterSettingsForm,
     tools: toolset(
         builtin.file.read,
         builtin.file.write,
@@ -60,9 +135,10 @@ export default defineAgentProfile({
 /**
  * 构造 writer prompt。保留 v2 的同名 helper 入口，但返回当前 v3 TSX Profile DSL。
  */
-export async function buildWriterPrompt(ctx: ProfilePrepareContext<Initial, Payload>) {
-    const writingStyle = await buildWritingStyle({});
-    const writingReference = await buildWritingReference({});
+export async function buildWriterPrompt(ctx: ProfilePrepareContext<Initial, Payload, Settings>) {
+    const writingStyle = await buildWritingStyle({preset: ctx.settings.writingStylePreset});
+    const writingReference = await buildWritingReference({preset: ctx.settings.writingReferencePreset});
+    const narrativePerson = narrativePersonText(ctx.settings.narrativePerson);
     const inputContext = await renderInputContext(ctx);
     return (
         <ProfilePrompt>
@@ -297,7 +373,7 @@ export async function buildWriterPrompt(ctx: ProfilePrepareContext<Initial, Payl
                     </paragraph_rhythm>
                     
                     <narrative_person>
-                        默认人称：第三人称。
+                        默认人称：${narrativePerson}。
                         - 可以写角色名、代称或贴合当前章节的视角人物。
                         - 不默认使用第二人称“你”称呼用户角色。
                         - 如果输入约束明确要求第一人称、第二人称、书信体、日志体等，优先服从输入约束。
@@ -363,6 +439,20 @@ export async function buildWriterPrompt(ctx: ProfilePrepareContext<Initial, Payl
             </AppendingSet>
         </ProfilePrompt>
     );
+}
+
+/**
+ * 渲染默认叙事人称。
+ */
+function narrativePersonText(value: Settings["narrativePerson"]): string {
+    switch (value) {
+        case "first":
+            return "第一人称";
+        case "second":
+            return "第二人称";
+        case "third":
+            return "第三人称";
+    }
 }
 
 

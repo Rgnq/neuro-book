@@ -65,6 +65,19 @@ model WorldMutation {
 
 > `WorldSnapshot` 表第一版不建。reduce 直接从头叠（`fromInstant = -∞`），结果一致；subject/切面规模变大后再引入缓存。
 
+### 切面 kind 集合
+
+`WorldSlice.kind` 是切面的分类标签，**主要给 UI / timeline 列表 / 过滤 / 日志用，不影响 reduce 语义**（reduce 只看 mutations，不看 kind）。
+
+| kind | 用途 |
+| --- | --- |
+| `event` | 默认。世界里实际发生的事件（战斗、对话、出生、移动…） |
+| `init` | 单个 subject 创建时写 default 的初始化切面；world subject 的 init 切面同时锚定纪元（`instant=0`） |
+| `correction` | 作者后期修正 / 补设定（往前插切面、修正历史），可特殊样式提醒「这是事后补的设定」 |
+| `bootstrap` | 模板创建项目时的批量预制切面（预制 subject、世界观初值）。与 init 区分：bootstrap = 项目级模板初始化，init = 单个 subject 创建 |
+
+**校验严格度**：枚举但允许扩展。未知 kind 默认按 `event` 处理，不报错。模板不强制约束，后续可加 `tick`、`battle`、`dream` 等特殊 kind。这与「mutation 可打未声明属性」的宽松校验风格一致。
+
 ### 关键设计说明
 
 - **`instant` 在 mutation 冗余存一份**：避免 reduce 时 join slice。复合索引 `(subjectId, instant, seq)` 让「取 erina 在 ≤t 的全部变更并排好序」是一次纯索引扫描。
@@ -120,17 +133,36 @@ class WorldEngineFacade {
      *  instant 决定落点，往任意时间点插切面与此同路径，无需单独 insert API。*/
     writeSlice(projectPath: string, input: SliceInput): Promise<{ sliceId: string }>;
 
-    // —— 状态查询（reduce，第一版唯一查询入口）——
-    /** 核心：reduce 出 instant（默认最新）的全量世界状态。ref 不自动解。*/
+    // —— 状态查询（reduce）——
+    /** 全量 reduce：instant（默认最新）的全量世界状态。给 UI / 调试用，agent 不直接用（会爆 token）。*/
     getWorldState(projectPath: string, at?: Instant): Promise<WorldState>;
 
+    /** 细粒度查询（agent 用）：按 subject / type / 属性投影 / 时刻过滤，避免一次拉全量。
+     *  - subjectIds: 只 reduce 这些 subject；省略则按 type 过滤；都省略则全部（慎用）。
+     *  - type: 只 reduce 该类型的 subject。
+     *  - attrs: 属性投影白名单（如 ["hp","location"]）；省略返回全部属性。
+     *  - at: reduce 截断点，默认最新。
+     *  - listLimit: list/collection 属性最多返回多少条（如 events 只取最近 N 条），防止超长。*/
+    queryState(projectPath: string, query: {
+        subjectIds?: string[];
+        type?: string;
+        attrs?: string[];
+        at?: Instant;
+        listLimit?: number;
+    }): Promise<SubjectState[]>;
+
     // —— timeline ——
-    /** 列切面（按 instant, seq）*/
-    listSlices(projectPath: string, range?: { from?: Instant; to?: Instant }): Promise<Array<{ id: string; instant: Instant; seq: number; title: string; kind: string }>>;
+    /** 列切面（按 instant, seq）。range 省略 + limit 取最近 N 个；支持时间段过滤。*/
+    listSlices(projectPath: string, query?: {
+        from?: Instant;
+        to?: Instant;
+        limit?: number;          // 最近 N 个（按 instant desc 取，再正序返回）
+        withMutations?: boolean; // 是否带每个切面的 mutation 明细，默认 false 只给元数据
+    }): Promise<Array<{ id: string; instant: Instant; seq: number; title: string; summary: string; kind: string; mutations?: MutationInput[] }>>;
 }
 ```
 
-> 后续按需补充：`getState`（单 subject）、`getAttrHistory`（HP 曲线）、`findReferers`（反查引用）、`editSlice` / `deleteSlice` / `revertSlice`（编辑与回退）。表结构与索引已为它们预留，不需要改 schema。
+> 后续按需补充：`getAttrHistory`（HP 曲线）、`findReferers`（反查引用）、`editSlice` / `deleteSlice` / `revertSlice`（编辑与回退）。表结构与索引已为它们预留，不需要改 schema。
 
 ## 4. reduce 算法（应用层，伪代码）
 

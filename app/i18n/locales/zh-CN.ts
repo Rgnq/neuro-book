@@ -369,6 +369,12 @@ const zhCN = {
                 projectProfilesDescription: "这些值写入所选 Project Workspace 的 .nbook/config.json。",
                 globalProfilesDescription: "只配置与默认参数不同的 Profile 覆盖。",
                 defaultPlaceholder: "默认",
+                profilePresets: "Profile 预设",
+                profilePresetsDescription: "这些设置由 Profile 自己声明，保存后下一次 run 生效。",
+                inherit: "继承",
+                override: "覆盖",
+                inheritedCurrent: "当前继承值：{value}",
+                unavailableValue: "当前值不在可用选项中，请重新选择。",
             },
             models: {
                 builtinXiaomiDescription: "Pi 内置小米 Token Plan 中国区 Provider",

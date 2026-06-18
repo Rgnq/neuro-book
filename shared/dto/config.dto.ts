@@ -8,6 +8,11 @@ import {
     DEFAULT_MARKDOWN_EDITOR_PREFERENCES,
     DEFAULT_MONACO_EDITOR_PREFERENCES,
 } from "nbook/shared/editor-workbench";
+import {
+    LowCodeFormDtoSchema,
+    LowCodeFormIssueDtoSchema,
+    LowCodeJsonObjectSchema,
+} from "nbook/shared/dto/low-code-form.dto";
 
 const JsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([
     z.string(),
@@ -125,6 +130,15 @@ export const ConfigAgentProfileSettingsDtoSchema = z.object({
         profileKey: ProfileKeySchema,
         name: z.string().trim().min(1),
         model: AgentProfileModelConfigDtoSchema,
+        settings: z.object({
+            form: LowCodeFormDtoSchema,
+            value: LowCodeJsonObjectSchema,
+            inheritedValue: LowCodeJsonObjectSchema.default({}),
+            effectivePatch: LowCodeJsonObjectSchema.default({}),
+            globalPatch: LowCodeJsonObjectSchema.default({}),
+            projectPatch: LowCodeJsonObjectSchema.default({}),
+            issues: z.array(LowCodeFormIssueDtoSchema).default([]),
+        }).nullable().default(null),
     })).default([]),
 });
 
@@ -174,7 +188,8 @@ export const EditorConfigDtoSchema = z.object({
 });
 
 export const ConfigAgentProfileMapDtoSchema = z.record(z.string(), z.object({
-    model: AgentProfileModelConfigDtoSchema.partial(),
+    model: AgentProfileModelConfigDtoSchema.partial().default({}),
+    settings: LowCodeJsonObjectSchema.optional(),
 })).default({});
 
 export const WebConfigDtoSchema = z.object({

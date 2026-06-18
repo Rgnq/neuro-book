@@ -30,6 +30,23 @@
   - 没有 track。「hp 随时间曲线」= 遍历所有打在 hp 上的 mutation（每条带 instant + op + 值），从切面序列直接 reduce 出轨迹。
 - `object` 固定结构的更新优先打**细路径**（`equipment.head`）保留逐槽位历史；整体 `set equipment = {...}` 留给「换整套」。
 
+### 与 JSON Patch 的关系（注脚，非合同）
+
+op 集合受 JSON Patch (RFC 6902) 启发但**不严格对齐**。粗略对应关系：
+
+| 我们的 op | JSON Patch 类似物 |
+| --- | --- |
+| `set` | `replace` / `add`（对单值 path） |
+| `unset` | `remove` |
+| `listAppend` | `add` 到 array `path/-`（只支持末尾） |
+| `collectionAdd` / `collectionRemove` | 集合按值 add / remove（不是按 index） |
+| `add`（数值） | **JSON Patch 无对应**（我们的扩展） |
+
+**为何不直接采用 JSON Patch 命名**：
+- JSON Patch 的 `add` 重载严重（对 object 是设字段、对 array 是插入、对 `/-` 是追加），一个名字三种语义靠 path 末尾形态决定。我们当前按属性 kind 决定语义、op 名字一眼定义，可读性更好。
+- list 故意**不支持中间插入** —— events 是时间序列，要往「过去」插一条经历的正确做法是**往更早 instant 插一个切面**，不是在现有 list 中间插元素，否则破坏「events 顺序 = 切面 instant 顺序」的不变量。
+- `add`（数值）是 JSON Patch 没有的扩展，必然超出 RFC 6902 范畴。
+
 ## 3. 属性字段格式（schema 怎么写一个属性）
 
 ```yaml

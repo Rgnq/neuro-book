@@ -12,12 +12,13 @@
 - 故事「现在」设定在 **复兴纪元 488 年**。
 - 注意：历法只是显示层换算（后续 `world-engine/calendar.yaml`）。下面所有 instant 都是真实 BigInt，可直接比较 / reduce。
 
-| 时间点 | 含义 | instant（秒） |
-| --- | --- | --- |
-| 复兴纪元 1 年 | 零点 / 公元 | `0` |
-| 复兴纪元 188 年 | 远古战争 | `5,816,448,000` |
-| 复兴纪元 200 年 | 凤凰王国建立 | `6,189,696,000` |
-| 复兴纪元 470 年 | 主角艾莉娜出生 | `14,587,776,000` |
+
+| 时间点                               | 含义                   | instant（秒）    |
+| ------------------------------------ | ---------------------- | ---------------- |
+| 复兴纪元 1 年                        | 零点 / 公元            | `0`              |
+| 复兴纪元 188 年                      | 远古战争               | `5,816,448,000`  |
+| 复兴纪元 200 年                      | 凤凰王国建立           | `6,189,696,000`  |
+| 复兴纪元 470 年                      | 主角艾莉娜出生         | `14,587,776,000` |
 | 复兴纪元 488 年 风信之月 15 日 14:00 | 故事现在（城北遭遇战） | `15,151,500,000` |
 
 ## 1. 模板创建：`world-engine/` 默认长什么样
@@ -28,7 +29,7 @@
 world-engine/
 ├── schema.yaml        # subject 类型定义（本例核心）
 ├── calendar.yaml      # 时间显示配置（后续，本例先用 §0 的换算）
-└── README.md          # directory-index frontmatter（中文 title + Lucide icon，驱动文件树展示）
+└── index.md          # directory-index frontmatter（中文 title + Lucide icon，驱动文件树展示）
 ```
 
 `schema.yaml`（模板自带的奇幻默认 schema，可被作者改）：
@@ -72,7 +73,12 @@ subjectTypes:
       control: { kind: scalar, type: ref(faction) }
 
   item:
-    desc: 需要独立追踪状态的物品（普通物品只作 inventory 元素即可）
+    desc: 需要独立追踪状态的物品才建 subject。判断标准 = 这个物品是否需要随时间追踪的独立状态。
+          有以下任一就建 subject：独立状态 / 隐藏真相 / 独特身份 / 持有人差异 / 损耗或激活状态 / 重要剧情身份。
+          否则 inventory 直接放字符串元素即可：
+            反例（不必建 subject）："干粮" / "火把" / "金币×10" —— 没有自己的耐久 / 历史 / 诅咒，inventory = ["干粮","火把"] 足矣。
+            正例（建 subject）：被附魔会变化的剑、唯一道具、被下毒的血药、有耐久和持有人差异的装备。
+          口诀：三瓶普通血药是 inventory 计数；一瓶被下毒的血药是 subject。
     attrs:
       name:       { kind: scalar, type: text }
       durability: { kind: scalar, type: int }
@@ -83,19 +89,24 @@ subjectTypes:
 
 模板初始化时预制几个开箱即用的 subject（实现后由初始化脚本 / leader agent 创建）：
 
-| subject id | type | 说明 |
-| --- | --- | --- |
-| `world` | world | 世界本身 |
-| `phoenix` | faction | 凤凰王国 |
-| `erina` | character | 主角艾莉娜 |
-| `capital` | location | 王都 |
-| `northgate` | location | 城北 |
+
+| subject id  | type      | 说明       |
+| ----------- | --------- | ---------- |
+| `world`     | world     | 世界本身   |
+| `phoenix`   | faction   | 凤凰王国   |
+| `erina`     | character | 主角艾莉娜 |
+| `capital`   | location  | 王都       |
+| `northgate` | location  | 城北       |
 
 每次 `createSubject` 都会生成一条 **kind=init 的初始化切面**，把 schema 的 `default` 写成一组 set mutation（见 §3 的初始化切面）。
 
-## 3. 项目初始化：用一个切片表示「公元」
+## 3. 项目初始化：用一个切片表示「公元」（= 世界的第一个切片）
 
-时间系统初始化 = 在 `instant=0` 写一个 **kind=init 的「公元」切面**，作为纪元锚点，同时承载 world subject 的初值。
+时间系统初始化 = 在 `instant=0` 写一个 **kind=init 的「公元」切面**，这是**整个世界的第一个切片**，同时承载 world subject 的初值。
+
+**零点不是一个独立机制**：它就是 world subject 的 init 切面的 instant。world 这个 subject 的 init 切面恰好落在 `0`，因此它的角色比其他 subject 多一层 —— **它定义了「什么时候是 0」**。未来若某项目想把零点改成「宇宙大爆炸前 100 年」，只要把 world 的 init 切面 instant 改成 `-3_153_600_000` 即可，所有其他切面照常工作，引擎不需要额外的「零点配置」机制。
+
+后续每创建一个新 subject 都会有自己的 init 切面（在它各自的「出生」instant），但只有 world 的 init 切面同时充当纪元锚点。
 
 ```jsonc
 // 切面 #0：公元 / 纪元锚点  @ instant=0
@@ -112,7 +123,7 @@ subjectTypes:
 }
 ```
 
-这条切面就是你说的「用一个切片表示公元」：它锚定 instant=0 的含义，并初始化世界主体。任何后续 reduce 都从这里起步。
+这条切面就是「用一个切片表示公元」：它锚定 instant=0 的含义，并初始化 world 主体。**任何后续 reduce 都从这里起步**，因为它是 timeline 上最早的切面。
 
 ## 4. 为世界填历史（过去的切片）
 
@@ -190,11 +201,12 @@ subjectTypes:
 ### reduce 验证：过去 vs 现在
 
 - **`getWorldState(at = 6,189,696,000)`（复兴纪元200年）** → 只叠 ≤ 该 instant 的切面（#0,#1,#2）：
+
   - world: era=复兴纪元, climate=寒冷（黑潮余波）, currentYear=1, events=[黑潮战争, 凤凰立国]
   - phoenix: name=凤凰王国, treasury=100000, capital=`subject://capital`
   - erina: **尚不存在有效状态**（#3 出生切面在此 instant 之后，被截断）→ 体现「倒叙看 200 年时主角还没出生」。
-
 - **`getWorldState()`（默认最新 = 488年现状）** → 叠全部切面：
+
   - world: era=复兴纪元, climate=寒冷（黑潮余波）, currentYear=488, events=[3 条]
   - erina: age=18, level=3, hp=80, faction=`subject://phoenix`, location=`subject://capital`, mind="渴望证明自己", memory={师门:"敬畏"}
 

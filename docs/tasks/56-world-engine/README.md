@@ -6,6 +6,7 @@
 
 - [schema-design.md](schema-design.md)：subject schema 字段格式与完整魔幻世界示例（草案）。
 - [sqlite-and-api.md](sqlite-and-api.md)：Project SQLite 表结构与世界引擎 API 契约（草案）。
+- [agent-tools.md](agent-tools.md)：世界引擎暴露给 Agent 的工具集设计（草案）。
 - [worked-example.md](worked-example.md)：奇幻世界从模板创建到演化 1 tick 的完整实例（验证模型自洽）。
 - [reference/content/simulation.md](../../../reference/content/simulation.md)：当前 `simulation/` 目录规范（events.jsonl / memory.jsonl / subjects / entities / runs）。
 - [reference/content/subjects.md](../../../reference/content/subjects.md)：subject 六文件分工与 RAG 机制。
@@ -64,6 +65,7 @@ type Instant = bigint;
   - 需要内置一套**现实公元纪年法（gregorian）**供用户开箱即用（含大小月 / 闰年规则）→ 因此层级进位需支持**不规则进位**（perChild 可为函数），不规则换算用预计算累加表 + 缓存。
   - 还需一套全固定进位的**幻想简明历**预设供复制改造。
   - 量劫：恒定长度 → 日历最高层 unit；长度不固定 → 走模糊时间。
+- **Calendar 进入第一版范围（后补定论，见 [agent-tools.md](agent-tools.md)）**：因为 agent 工具规定「LLM 收发人读时间串、不接触 BigInt」，工具层需要 Calendar 的 parse（串→instant）/ format（instant→串）。分层不变：facade 仍纯 BigInt，Calendar 只在工具层做边界转换。第一版只要对项目 canonical 格式 **format/parse 对称可逆** 即可（完整自定义层级、模糊时间仍可推后）。配置放 `world-engine/calendar.yaml`。
 
 ### 待讨论：模糊时间（已有初步构想，未定论）
 

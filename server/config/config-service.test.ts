@@ -6,6 +6,8 @@ import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 import {Type} from "typebox";
 import {defineAgentProfile} from "nbook/server/agent/profiles/define-agent-profile";
 import {AgentProfileCatalog} from "nbook/server/agent/profiles/catalog";
+import {toolset} from "nbook/server/agent/profiles/profile-tools";
+import {defineLowCodeForm} from "nbook/server/low-code-form";
 import {
     loadEffectiveConfigForAgentRuntime,
     readConfigBootstrap,
@@ -15,7 +17,7 @@ import {
 } from "nbook/server/config/config-service";
 
 const createdRoots: string[] = [];
-const catalog = createCatalog(["leader.default", "leader.assets", "custom.agent"]);
+const catalog = createCatalog(["leader.default", "leader.assets", "custom.agent", "writer"]);
 let globalConfigBackupPath: string | null = null;
 
 describe("config service", {timeout: 30_000}, () => {
@@ -650,6 +652,158 @@ describe("config service", {timeout: 30_000}, () => {
             stream: true,
         });
     });
+
+    it("Agent Profile settings 支持 Global 保存并返回 form 与 effective value", async () => {
+        const snapshot = await saveGlobalConfig({
+            agent: {
+                defaultProfileKey: {novel: "leader.default", userAssets: "leader.assets"},
+                profiles: {
+                    writer: {
+                        model: {},
+                        settings: {
+                            writingStylePreset: "cinematic",
+                            narrativePerson: "first",
+                        },
+                    },
+                },
+            },
+        }, {workspaceKind: "user-assets"}, catalog);
+        const writer = snapshot.agentProfileSettings.agentProfiles.find((profile) => profile.profileKey === "writer");
+
+        expect(writer?.settings?.form.fields.map((field) => field.path)).toEqual(["writingStylePreset", "narrativePerson"]);
+        expect(writer?.settings?.value).toMatchObject({
+            writingStylePreset: "cinematic",
+            narrativePerson: "first",
+        });
+        expect(writer?.settings?.inheritedValue).toMatchObject({
+            writingStylePreset: "default-style",
+            narrativePerson: "third",
+        });
+        expect(writer?.settings?.globalPatch).toEqual({
+            writingStylePreset: "cinematic",
+            narrativePerson: "first",
+        });
+    });
+
+    it("Agent Profile settings 支持 Project patch 覆盖与继承", async () => {
+        await saveGlobalConfig({
+            agent: {
+                defaultProfileKey: {novel: "leader.default", userAssets: "leader.assets"},
+                profiles: {
+                    writer: {
+                        model: {},
+                        settings: {
+                            writingStylePreset: "cinematic",
+                            narrativePerson: "first",
+                        },
+                    },
+                },
+            },
+        }, {workspaceKind: "novel", projectPath: "workspace/config-test-project"}, catalog);
+
+        const overrideSnapshot = await saveProjectConfig({
+            agent: {
+                profiles: {
+                    writer: {
+                        model: {},
+                        settings: {
+                            narrativePerson: "second",
+                        },
+                    },
+                },
+            },
+        }, {workspaceKind: "novel", projectPath: "workspace/config-test-project"}, catalog);
+        const overridden = overrideSnapshot.agentProfileSettings.agentProfiles.find((profile) => profile.profileKey === "writer");
+
+        expect(overridden?.settings?.value).toMatchObject({
+            writingStylePreset: "cinematic",
+            narrativePerson: "second",
+        });
+        expect(overridden?.settings?.inheritedValue).toMatchObject({
+            writingStylePreset: "cinematic",
+            narrativePerson: "first",
+        });
+        expect(overridden?.settings?.projectPatch).toEqual({
+            narrativePerson: "second",
+        });
+
+        const inheritedSnapshot = await saveProjectConfig({
+            agent: {
+                profiles: {
+                    writer: {
+                        model: {},
+                        settings: {},
+                    },
+                },
+            },
+        }, {workspaceKind: "novel", projectPath: "workspace/config-test-project"}, catalog);
+        const inherited = inheritedSnapshot.agentProfileSettings.agentProfiles.find((profile) => profile.profileKey === "writer");
+
+        expect(inherited?.settings?.value).toMatchObject({
+            writingStylePreset: "cinematic",
+            narrativePerson: "first",
+        });
+        expect(inherited?.settings?.projectPatch).toEqual({});
+    });
+
+    it("Agent Profile settings 保存 Project patch 时按继承后的 effective value 校验", async () => {
+        await saveGlobalConfig({
+            agent: {
+                defaultProfileKey: {novel: "leader.default", userAssets: "leader.assets"},
+                profiles: {
+                    writer: {
+                        model: {},
+                        settings: {
+                            writingStylePreset: "cross-invalid",
+                        },
+                    },
+                },
+            },
+        }, {workspaceKind: "novel", projectPath: "workspace/config-test-project"}, catalog);
+
+        await expect(saveProjectConfig({
+            agent: {
+                profiles: {
+                    writer: {
+                        model: {},
+                        settings: {
+                            narrativePerson: "second",
+                        },
+                    },
+                },
+            },
+        }, {workspaceKind: "novel", projectPath: "workspace/config-test-project"}, catalog)).rejects.toMatchObject({statusCode: 400});
+    });
+
+    it("Agent Profile settings 保存时拒绝非法 option 与自定义校验错误", async () => {
+        await expect(saveGlobalConfig({
+            agent: {
+                defaultProfileKey: {novel: "leader.default", userAssets: "leader.assets"},
+                profiles: {
+                    writer: {
+                        model: {},
+                        settings: {
+                            writingStylePreset: "missing",
+                        },
+                    },
+                },
+            },
+        }, {workspaceKind: "novel", projectPath: "workspace/config-test-project"}, catalog)).rejects.toMatchObject({statusCode: 400});
+
+        await expect(saveGlobalConfig({
+            agent: {
+                defaultProfileKey: {novel: "leader.default", userAssets: "leader.assets"},
+                profiles: {
+                    writer: {
+                        model: {},
+                        settings: {
+                            writingStylePreset: "forbidden",
+                        },
+                    },
+                },
+            },
+        }, {workspaceKind: "novel", projectPath: "workspace/config-test-project"}, catalog)).rejects.toMatchObject({statusCode: 400});
+    });
 });
 
 async function moveGlobalConfigAside(): Promise<string | null> {
@@ -681,17 +835,70 @@ async function createProjectFixture(): Promise<void> {
 
 function createCatalog(profileKeys: string[]): AgentProfileCatalog {
     const profileCatalog = new AgentProfileCatalog("__missing_system__", "__missing_user__");
+    const writerSettingsForm = defineLowCodeForm({
+        schema: Type.Object({
+            writingStylePreset: Type.String(),
+            narrativePerson: Type.Union([
+                Type.Literal("first"),
+                Type.Literal("second"),
+                Type.Literal("third"),
+            ]),
+        }, {additionalProperties: false}),
+        defaults: {
+            writingStylePreset: "default-style",
+            narrativePerson: "third",
+        },
+        fields: [
+            {
+                path: "writingStylePreset",
+                component: "combobox",
+                label: "文风预设",
+                options: [
+                    {value: "default-style", label: "默认文风"},
+                    {value: "cinematic", label: "电影感"},
+                    {value: "cross-invalid", label: "交叉校验"},
+                    {value: "forbidden", label: "禁用文风"},
+                ],
+            },
+            {
+                path: "narrativePerson",
+                component: "radio",
+                label: "默认人称",
+                options: [
+                    {value: "third", label: "第三人称"},
+                    {value: "first", label: "第一人称"},
+                    {value: "second", label: "第二人称"},
+                ],
+            },
+        ],
+        validate(value) {
+            const issues: Array<{path: string; severity: "error"; message: string}> = [];
+            if (value.writingStylePreset === "forbidden") {
+                issues.push({path: "writingStylePreset", severity: "error" as const, message: "禁用文风不可保存。"});
+            }
+            if (value.writingStylePreset === "cross-invalid" && value.narrativePerson === "second") {
+                issues.push({path: "narrativePerson", severity: "error" as const, message: "交叉校验文风不能使用第二人称。"});
+            }
+            return issues;
+        },
+    });
     for (const profileKey of profileKeys) {
-        profileCatalog.register(defineAgentProfile({
+        const baseProfile = {
             manifest: {
                 key: profileKey,
                 name: profileKey,
             },
-            inputSchema: Type.Object({}),
+            initialSchema: Type.Object({}, {additionalProperties: false}),
             outputSchema: Type.Unknown(),
-            allowedToolKeys: [],
+            tools: toolset(),
             prepare: () => ({}),
-        }), true);
+        } satisfies Parameters<typeof defineAgentProfile>[0];
+        profileCatalog.register(profileKey === "writer"
+            ? defineAgentProfile({
+                ...baseProfile,
+                settingsForm: writerSettingsForm,
+            })
+            : defineAgentProfile(baseProfile), true);
     }
     return profileCatalog;
 }

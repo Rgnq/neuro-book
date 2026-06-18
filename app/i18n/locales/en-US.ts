@@ -371,6 +371,12 @@ const enUS = {
                 projectProfilesDescription: "These values are written to the selected Project Workspace .nbook/config.json.",
                 globalProfilesDescription: "Only configure Profile overrides that differ from default parameters.",
                 defaultPlaceholder: "Default",
+                profilePresets: "Profile Presets",
+                profilePresetsDescription: "These settings are declared by the Profile itself and take effect on the next run.",
+                inherit: "Inherit",
+                override: "Override",
+                inheritedCurrent: "Current inherited value: {value}",
+                unavailableValue: "The current value is not available. Select another option.",
             },
             models: {
                 builtinXiaomiDescription: "Pi built-in Xiaomi Token Plan CN Provider",

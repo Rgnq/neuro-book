@@ -1,14 +1,23 @@
 <script setup lang="ts">
+import type {Ref} from "vue";
 import type {
     AgentProfileModelConfigDto,
-    AgentProfileModelSettingsDto,
     ThinkingLevelDto,
 } from "nbook/shared/dto/app-settings.dto";
 import NovelIdeModelSelect from "nbook/app/components/novel-ide/settings/NovelIdeModelSelect.vue";
 import FormInput from "nbook/app/components/common/form/FormInput.vue";
 import FormSelect, {type SelectOption} from "nbook/app/components/common/form/FormSelect.vue";
+import LowCodeForm from "nbook/app/components/common/low-code-form/LowCodeForm.vue";
+import {
+    cloneLowCodeObject,
+    hasLowCodePath,
+    lowCodeJsonEqual,
+    readLowCodePath,
+} from "nbook/app/components/common/low-code-form/low-code-form-utils";
 import {useConfigApi} from "nbook/app/composables/useConfigApi";
-import type {ConfigEditorSnapshotDto, ConfigWorkspaceQueryDto, GlobalConfigDto, ProjectConfigDto} from "nbook/shared/dto/config.dto";
+import {resolveApiErrorMessage} from "nbook/app/utils/api-error";
+import type {ConfigAgentProfileSettingsDto, ConfigEditorSnapshotDto, ConfigWorkspaceQueryDto, GlobalConfigDto, ProjectConfigDto} from "nbook/shared/dto/config.dto";
+import type {LowCodeFormDto, LowCodeFormIssueDto, LowCodeJsonObject} from "nbook/shared/dto/low-code-form.dto";
 
 type ConfigSettingsScope = "global" | "project";
 
@@ -26,6 +35,7 @@ type AgentProfileDraft = {
     profileKey: string;
     name: string;
     model: AgentProfileModelDraft;
+    settings: AgentProfileSettingsDraft | null;
 };
 
 type AgentProfileModelDraft = {
@@ -36,11 +46,24 @@ type AgentProfileModelDraft = {
     stream: boolean | null;
 };
 
+type AgentProfileSettingsDraft = {
+    form: LowCodeFormDto;
+    values: LowCodeJsonObject;
+    inheritedValue: LowCodeJsonObject;
+    issues: LowCodeFormIssueDto[];
+    overridePaths: string[];
+};
+
+type AgentProfileConfigDraft = {
+    model: Partial<AgentProfileModelConfigDto>;
+    settings?: LowCodeJsonObject;
+};
+
 const loading = ref(false);
 const saving = ref(false);
 const errorText = ref("");
 const successText = ref("");
-const enabledModels = ref<AgentProfileModelSettingsDto["enabledModels"]>([]);
+const enabledModels = ref<ConfigAgentProfileSettingsDto["enabledModels"]>([]);
 const profileModelDefaults = ref<AgentProfileModelDraft>({
     modelKey: null,
     temperature: "",
@@ -48,7 +71,7 @@ const profileModelDefaults = ref<AgentProfileModelDraft>({
     reasoningEffort: "off",
     stream: true,
 });
-const profiles = ref<AgentProfileDraft[]>([]);
+const profiles = ref([]) as Ref<AgentProfileDraft[]>;
 const snapshotText = ref("");
 const configApi = useConfigApi();
 const {t} = useI18n();
@@ -166,6 +189,89 @@ function cloneModelDraft(model: Partial<AgentProfileModelConfigDto> | undefined)
 }
 
 /**
+ * 克隆 profile settings 草稿。Global 编辑完整值，Project 编辑 patch。
+ */
+function cloneSettingsDraft(
+    settings: ConfigAgentProfileSettingsDto["agentProfiles"][number]["settings"],
+    scope: ConfigSettingsScope,
+): AgentProfileSettingsDraft | null {
+    if (!settings) {
+        return null;
+    }
+    const patch = scope === "project" ? settings.projectPatch : settings.globalPatch;
+    return {
+        form: settings.form,
+        values: scope === "project" ? cloneLowCodeObject(patch) : cloneLowCodeObject(settings.value),
+        inheritedValue: cloneLowCodeObject(settings.inheritedValue),
+        issues: settings.issues,
+        overridePaths: scope === "project"
+            ? settings.form.fields.filter((field) => hasLowCodePath(patch, field.path)).map((field) => field.path)
+            : [],
+    };
+}
+
+/**
+ * 构造 settings patch。Global 只保存与 profile defaults 不同的字段，Project 只保存覆盖字段。
+ */
+function buildSettingsPatch(settings: AgentProfileSettingsDraft | null): LowCodeJsonObject {
+    if (!settings) {
+        return {};
+    }
+    if (isProjectScope.value) {
+        return Object.fromEntries(settings.overridePaths.flatMap((path) => {
+            const value = readLowCodePath(settings.values, path);
+            return value === undefined ? [] : [[path, value] as const];
+        })) as LowCodeJsonObject;
+    }
+    return Object.fromEntries(settings.form.fields.flatMap((field) => {
+        const value = readLowCodePath(settings.values, field.path);
+        const defaultValue = hasLowCodePath(settings.form.defaults, field.path)
+            ? readLowCodePath(settings.form.defaults, field.path)
+            : field.defaultValue;
+        if (value === undefined || lowCodeJsonEqual(value, defaultValue)) {
+            return [];
+        }
+        return [[field.path, value] as const];
+    })) as LowCodeJsonObject;
+}
+
+/**
+ * 判断 JSON object 是否为空。
+ */
+function isEmptyObject(value: LowCodeJsonObject | Partial<AgentProfileModelConfigDto>): boolean {
+    return Object.keys(value).length === 0;
+}
+
+/**
+ * 构造单个 profile 的保存配置，同时保留 model 与 settings。
+ */
+function buildProfileConfig(profile: AgentProfileDraft): {model: Partial<AgentProfileModelConfigDto>; settings?: LowCodeJsonObject} | null {
+    const modelPatch = isProjectScope.value ? buildProjectModelPatch(profile.model) : buildModelPatch(profile.model);
+    const settingsPatch = buildSettingsPatch(profile.settings);
+    if (isEmptyObject(modelPatch) && (!profile.settings || isEmptyObject(settingsPatch))) {
+        return null;
+    }
+    return {
+        model: modelPatch,
+        ...(profile.settings && !isEmptyObject(settingsPatch) ? {settings: settingsPatch} : {}),
+    };
+}
+
+/**
+ * 构造 profile 配置 map，避免在 Vue SFC 中触发过深类型推导。
+ */
+function buildProfileConfigMap(): Record<string, AgentProfileConfigDraft> {
+    const result: Record<string, AgentProfileConfigDraft> = {};
+    for (const profile of profiles.value) {
+        const config = buildProfileConfig(profile);
+        if (config) {
+            result[profile.profileKey] = config;
+        }
+    }
+    return result;
+}
+
+/**
  * 构造 Global Config 写回体，只替换 agent.profiles。
  */
 function buildGlobalConfigPayload(): GlobalConfigDto {
@@ -183,12 +289,7 @@ function buildGlobalConfigPayload(): GlobalConfigDto {
                 userAssets: defaultProfileKey.userAssets ?? null,
             },
             profileModelDefaults: buildCompleteModelConfig(profileModelDefaults.value),
-            profiles: Object.fromEntries(profiles.value.flatMap((profile) => {
-                const modelPatch = buildModelPatch(profile.model);
-                return Object.keys(modelPatch).length > 0
-                    ? [[profile.profileKey, {model: modelPatch}] as const]
-                    : [];
-            })),
+            profiles: buildProfileConfigMap(),
         },
     };
 }
@@ -203,12 +304,7 @@ function buildProjectConfigPayload(): ProjectConfigDto {
         agent: {
             ...(base.agent ?? {}),
             profileModelDefaults: buildModelPatch(profileModelDefaults.value),
-            profiles: Object.fromEntries(profiles.value.flatMap((profile) => {
-                const modelPatch = buildProjectModelPatch(profile.model);
-                return Object.keys(modelPatch).length > 0
-                    ? [[profile.profileKey, {model: modelPatch}] as const]
-                    : [];
-            })),
+            profiles: buildProfileConfigMap(),
         },
     };
 }
@@ -245,7 +341,7 @@ function buildCompleteModelConfig(model: AgentProfileModelDraft): AgentProfileMo
 /**
  * 将接口响应应用到本地。
  */
-function applySettings(settings: AgentProfileModelSettingsDto): void {
+function applySettings(settings: ConfigAgentProfileSettingsDto): void {
     enabledModels.value = settings.enabledModels;
     profileModelDefaults.value = cloneModelDraft(settings.profileModelDefaults);
     if (profileModelDefaults.value.reasoningEffort === null) {
@@ -258,6 +354,7 @@ function applySettings(settings: AgentProfileModelSettingsDto): void {
         profileKey: profile.profileKey,
         name: profile.name,
         model: cloneModelDraft(editorSnapshot.value?.global.agent?.profiles?.[profile.profileKey]?.model),
+        settings: cloneSettingsDraft(profile.settings, "global"),
     }));
     snapshotText.value = JSON.stringify(buildGlobalSavePayload());
 }
@@ -274,6 +371,7 @@ function applyProjectSettings(snapshot: ConfigEditorSnapshotDto): void {
             profileKey: profile.profileKey,
             name: profile.name,
             model: cloneModelDraft(override),
+            settings: cloneSettingsDraft(profile.settings, "project"),
         };
     });
     snapshotText.value = JSON.stringify(buildProjectDirtyPayload());
@@ -282,24 +380,14 @@ function applyProjectSettings(snapshot: ConfigEditorSnapshotDto): void {
 /**
  * 读取 Project 覆盖保存形态，用于脏检查。
  */
-function buildProjectSavePayload(): Record<string, {model: Partial<AgentProfileModelConfigDto>}> {
-    return Object.fromEntries(profiles.value.flatMap((profile) => {
-        const modelPatch = buildProjectModelPatch(profile.model);
-        return Object.keys(modelPatch).length > 0
-            ? [[profile.profileKey, {model: modelPatch}] as const]
-            : [];
-    }));
+function buildProjectSavePayload(): Record<string, {model: Partial<AgentProfileModelConfigDto>; settings?: LowCodeJsonObject}> {
+    return buildProfileConfigMap();
 }
 
 function buildGlobalSavePayload(): Record<string, unknown> {
     return {
         profileModelDefaults: buildCompleteModelConfig(profileModelDefaults.value),
-        profiles: Object.fromEntries(profiles.value.flatMap((profile) => {
-            const modelPatch = buildModelPatch(profile.model);
-            return Object.keys(modelPatch).length > 0
-                ? [[profile.profileKey, {model: modelPatch}] as const]
-                : [];
-        })),
+        profiles: buildProfileConfigMap(),
     };
 }
 
@@ -327,7 +415,7 @@ async function loadSettings(): Promise<void> {
             applySettings(snapshot.agentProfileSettings);
         }
     } catch (error) {
-        errorText.value = error instanceof Error ? error.message : t("settings.panels.profileModels.loadFailed");
+        errorText.value = resolveApiErrorMessage(error, t("settings.panels.profileModels.loadFailed"));
     } finally {
         loading.value = false;
     }
@@ -358,7 +446,7 @@ async function saveSettings(): Promise<void> {
             successText.value = t("settings.panels.profileModels.globalSaveSuccess");
         }
     } catch (error) {
-        errorText.value = error instanceof Error ? error.message : t("settings.panels.profileModels.saveFailed");
+        errorText.value = resolveApiErrorMessage(error, t("settings.panels.profileModels.saveFailed"));
     } finally {
         saving.value = false;
     }
@@ -375,6 +463,10 @@ function resetProfile(profile: AgentProfileDraft): void {
         reasoningEffort: null,
         stream: null,
     };
+    if (profile.settings) {
+        profile.settings.values = isProjectScope.value ? {} : cloneLowCodeObject(profile.settings.form.defaults);
+        profile.settings.overridePaths = [];
+    }
 }
 
 function resetProfileModelDefaults(): void {
@@ -613,6 +705,25 @@ defineExpose({
                                 <label class="text-xs font-medium text-[var(--text-secondary)]">{{ t("settings.panels.profileModels.stream") }}</label>
                                 <FormSelect :model-value="streamSelectValue(profile.model.stream)" :options="streamOptionsForProfile(profile)" @update:model-value="setProfileStream(profile, $event)" />
                             </div>
+                        </div>
+
+                        <!-- Profile 自定义低代码预设 -->
+                        <div v-if="profile.settings" class="mt-4 border-t border-[var(--border-color)] pt-4">
+                            <div class="mb-3 flex items-start gap-2">
+                                <span class="i-lucide-sliders-horizontal mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]"></span>
+                                <div>
+                                    <div class="text-xs font-semibold text-[var(--text-main)]">{{ t("settings.panels.profileModels.profilePresets") }}</div>
+                                    <div class="mt-0.5 text-[11px] leading-4 text-[var(--text-muted)]">{{ t("settings.panels.profileModels.profilePresetsDescription") }}</div>
+                                </div>
+                            </div>
+                            <LowCodeForm
+                                v-model="profile.settings.values"
+                                v-model:override-paths="profile.settings.overridePaths"
+                                :form="profile.settings.form"
+                                :issues="profile.settings.issues"
+                                :scope="isProjectScope ? 'project' : 'global'"
+                                :inherited-value="profile.settings.inheritedValue"
+                            />
                         </div>
                     </div>
                 </div>

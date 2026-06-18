@@ -35,6 +35,26 @@
 
 `message` 必须可独立表达本轮任务：写什么、范围、约束、结束条件和交付要求。`input.context` 只是结构化引用清单，不能替代任务说明。
 
+## Profile 预设
+
+`writer` 通过 profile settings 提供可视化预设配置。入口在设置页的“Agent Profile 模型”面板中，`writer` 卡片会显示“Profile 预设”区域。
+
+第一版字段：
+
+- `writingStylePreset`：默认文风预设，来自 `agent/writing-presets/styles`，用受限 combobox 选择。
+- `writingReferencePreset`：默认文风参考样本，来自 `agent/writing-presets/references`，用受限 combobox 选择。
+- `narrativePerson`：默认人称，支持第一人称、第二人称、第三人称。
+
+这些设置保存在 Config 的 `agent.profiles.writer.settings` patch 中。Global Config 覆盖 profile 内置默认值；Project Config 可对单个字段选择“继承”或“覆盖”。保存后下一次 writer prepare / run 生效，已有长期 session 不需要重建。
+
+优先级：
+
+- 本轮 `invoke_agent.message` 中明确提出的文风、人称或叙事要求优先。
+- 其次使用 `ctx.settings` 中的 profile 预设。
+- 最后回退到 writer profile 内置默认值。
+
+不要把文风、人称这类默认偏好放回 `initial` 或 `invoke_agent.input`。`initial` 仍是创建期稳定数据，`input` 仍是单次任务的结构化载荷。
+
 ## Writer 能看到什么
 
 writer prepare 阶段只注入：

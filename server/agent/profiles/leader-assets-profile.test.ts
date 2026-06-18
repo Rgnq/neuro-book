@@ -10,8 +10,8 @@ import {messageText} from "nbook/server/agent/messages/message-utils";
 import type {RuntimeSessionFacade} from "nbook/server/agent/profiles/define-agent-runtime";
 import type {NeuroSessionContext} from "nbook/server/agent/session/types";
 import type {AgentDialogueContent} from "nbook/server/agent/session/dialogue-content";
-import {loadWritingReferencePresets} from "nbook/server/agent/profiles/writer-writing-reference";
-import {loadWritingStylePresets} from "nbook/server/agent/profiles/writer-writing-style";
+import {DEFAULT_WRITING_REFERENCE_PRESET, loadWritingReferencePresets} from "nbook/server/agent/profiles/writer-writing-reference";
+import {DEFAULT_WRITING_STYLE_PRESET, loadWritingStylePresets} from "nbook/server/agent/profiles/writer-writing-style";
 import {createTestVariableAccessor} from "nbook/server/agent/variables/test-utils";
 
 vi.mock("nbook/server/utils/prisma", () => ({
@@ -727,6 +727,7 @@ describe("assets builtin v3 profiles", () => {
                     planModeActive: false,
                 }),
                 initial: {},
+                settings: defaultWriterSettings(),
                 invocation: {
                     message: "请续写这一章，写到账册缺页被发现为止。",
                     payload: {
@@ -780,6 +781,49 @@ describe("assets builtin v3 profiles", () => {
         }
     });
 
+    it("writer settings 会切换文风参考、文风预设和默认人称", async () => {
+        const referenceKey = `test-reference-${randomUUID()}`;
+        const referenceDir = join("workspace", ".nbook", "agent", "writing-presets", "references");
+        const referenceFile = join(referenceDir, `${referenceKey}.md`);
+        await mkdir(referenceDir, {recursive: true});
+        await writeFile(referenceFile, [
+            "---",
+            `key: ${referenceKey}`,
+            "label: 测试文风参考",
+            "sourceTitle: 测试作品",
+            "sourceChapters: 第1章",
+            "generatedFrom: test",
+            "---",
+            "测试参考正文：句子短促，节奏明快。",
+            "",
+        ].join("\n"), "utf8");
+
+        try {
+            const prepared = await writerProfile.prepare!({
+                session: testSession({
+                    profileKey: "writer",
+                    workspaceRoot: "workspace",
+                }),
+                initial: {},
+                settings: {
+                    writingStylePreset: "darkside-kitten.light-lively",
+                    writingReferencePreset: referenceKey,
+                    narrativePerson: "second",
+                },
+                vars: createTestVariableAccessor(),
+                catalog: {profiles: [], issues: []},
+                skills: [],
+            });
+
+            expect(prepared.systemPrompt).toContain('key="darkside-kitten.light-lively"');
+            expect(prepared.systemPrompt).toContain("正文用轻松、活泼的风格");
+            expect(prepared.systemPrompt).toContain("测试参考正文：句子短促，节奏明快。");
+            expect(prepared.systemPrompt).toContain("默认人称：第二人称");
+        } finally {
+            await rm(referenceFile, {force: true});
+        }
+    });
+
     it("writer 无 payload 时不崩溃，非法 payload path 会明确拒绝", async () => {
         const projectSlug = `writer-project-${randomUUID()}`;
         const projectRoot = resolve("workspace", projectSlug);
@@ -799,6 +843,7 @@ describe("assets builtin v3 profiles", () => {
         };
         const contextBase = {
             session: testSession(baseSession),
+            settings: defaultWriterSettings(),
             vars: createTestVariableAccessor(),
             catalog: {profiles: [], issues: []},
             skills: [],
@@ -855,6 +900,17 @@ describe("assets builtin v3 profiles", () => {
         }
     });
 });
+
+/**
+ * 创建 writer profile 手工 prepare 测试使用的默认 settings。
+ */
+function defaultWriterSettings() {
+    return {
+        writingStylePreset: DEFAULT_WRITING_STYLE_PRESET,
+        writingReferencePreset: DEFAULT_WRITING_REFERENCE_PRESET,
+        narrativePerson: "third" as const,
+    };
+}
 
 function testSession(input: Partial<NeuroSessionContext>): RuntimeSessionFacade {
     const session: RuntimeSessionFacade = {

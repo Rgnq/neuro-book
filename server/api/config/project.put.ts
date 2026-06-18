@@ -125,6 +125,7 @@ defineRouteMeta({
                                         "type": "object",
                                         "properties": {
                                             "model": {
+                                                "default": {},
                                                 "type": "object",
                                                 "properties": {
                                                     "modelKey": {
@@ -165,6 +166,12 @@ defineRouteMeta({
                                                     }
                                                 },
                                                 "additionalProperties": false
+                                            },
+                                            "settings": {
+                                                "type": "object",
+                                                "additionalProperties": {
+                                                    "$ref": "#/definitions/__schema0"
+                                                }
                                             }
                                         },
                                         "required": [
@@ -300,7 +307,41 @@ defineRouteMeta({
                             "additionalProperties": false
                         }
                     },
-                    "additionalProperties": {}
+                    "additionalProperties": {},
+                    "definitions": {
+                        "__schema0": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "boolean"
+                                },
+                                {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                        null
+                                    ]
+                                },
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/definitions/__schema0"
+                                    }
+                                },
+                                {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "$ref": "#/definitions/__schema0"
+                                    }
+                                }
+                            ]
+                        }
+                    }
                 }
             }
         }
@@ -712,6 +753,7 @@ defineRouteMeta({
                                                     "type": "object",
                                                     "properties": {
                                                         "model": {
+                                                            "default": {},
                                                             "type": "object",
                                                             "properties": {
                                                                 "modelKey": {
@@ -752,6 +794,12 @@ defineRouteMeta({
                                                                 }
                                                             },
                                                             "additionalProperties": false
+                                                        },
+                                                        "settings": {
+                                                            "type": "object",
+                                                            "additionalProperties": {
+                                                                "$ref": "#/definitions/__schema2"
+                                                            }
                                                         }
                                                     },
                                                     "required": [
@@ -1226,6 +1274,7 @@ defineRouteMeta({
                                                     "type": "object",
                                                     "properties": {
                                                         "model": {
+                                                            "default": {},
                                                             "type": "object",
                                                             "properties": {
                                                                 "modelKey": {
@@ -1266,6 +1315,12 @@ defineRouteMeta({
                                                                 }
                                                             },
                                                             "additionalProperties": false
+                                                        },
+                                                        "settings": {
+                                                            "type": "object",
+                                                            "additionalProperties": {
+                                                                "$ref": "#/definitions/__schema2"
+                                                            }
                                                         }
                                                     },
                                                     "required": [
@@ -2051,12 +2106,224 @@ defineRouteMeta({
                                                         "stream"
                                                     ],
                                                     "additionalProperties": false
+                                                },
+                                                "settings": {
+                                                    "default": null,
+                                                    "nullable": true,
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "form": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "defaults": {
+                                                                    "default": {},
+                                                                    "type": "object",
+                                                                    "additionalProperties": {
+                                                                        "$ref": "#/definitions/__schema2"
+                                                                    }
+                                                                },
+                                                                "fields": {
+                                                                    "default": [],
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "path": {
+                                                                                "type": "string",
+                                                                                "minLength": 1
+                                                                            },
+                                                                            "component": {
+                                                                                "type": "string",
+                                                                                "enum": [
+                                                                                    "text",
+                                                                                    "textarea",
+                                                                                    "number",
+                                                                                    "switch",
+                                                                                    "select",
+                                                                                    "combobox",
+                                                                                    "radio",
+                                                                                    "checkbox"
+                                                                                ]
+                                                                            },
+                                                                            "label": {
+                                                                                "type": "string",
+                                                                                "minLength": 1
+                                                                            },
+                                                                            "description": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "placeholder": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "required": {
+                                                                                "default": false,
+                                                                                "type": "boolean"
+                                                                            },
+                                                                            "defaultValue": {
+                                                                                "allOf": [
+                                                                                    {
+                                                                                        "$ref": "#/definitions/__schema2"
+                                                                                    }
+                                                                                ]
+                                                                            },
+                                                                            "options": {
+                                                                                "default": [],
+                                                                                "type": "array",
+                                                                                "items": {
+                                                                                    "type": "object",
+                                                                                    "properties": {
+                                                                                        "value": {
+                                                                                            "anyOf": [
+                                                                                                {
+                                                                                                    "type": "string"
+                                                                                                },
+                                                                                                {
+                                                                                                    "type": "number"
+                                                                                                },
+                                                                                                {
+                                                                                                    "type": "boolean"
+                                                                                                }
+                                                                                            ]
+                                                                                        },
+                                                                                        "label": {
+                                                                                            "type": "string",
+                                                                                            "minLength": 1
+                                                                                        },
+                                                                                        "description": {
+                                                                                            "type": "string"
+                                                                                        },
+                                                                                        "disabled": {
+                                                                                            "type": "boolean"
+                                                                                        }
+                                                                                    },
+                                                                                    "required": [
+                                                                                        "value",
+                                                                                        "label"
+                                                                                    ],
+                                                                                    "additionalProperties": false
+                                                                                }
+                                                                            },
+                                                                            "rows": {
+                                                                                "type": "integer",
+                                                                                "exclusiveMinimum": true,
+                                                                                "maximum": 9007199254740991
+                                                                            },
+                                                                            "min": {
+                                                                                "type": "number"
+                                                                            },
+                                                                            "max": {
+                                                                                "type": "number"
+                                                                            },
+                                                                            "step": {
+                                                                                "type": "number",
+                                                                                "minimum": 0,
+                                                                                "exclusiveMinimum": true
+                                                                            },
+                                                                            "integer": {
+                                                                                "type": "boolean"
+                                                                            }
+                                                                        },
+                                                                        "required": [
+                                                                            "path",
+                                                                            "component",
+                                                                            "label",
+                                                                            "required",
+                                                                            "options"
+                                                                        ],
+                                                                        "additionalProperties": false
+                                                                    }
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "defaults",
+                                                                "fields"
+                                                            ],
+                                                            "additionalProperties": false
+                                                        },
+                                                        "value": {
+                                                            "type": "object",
+                                                            "additionalProperties": {
+                                                                "$ref": "#/definitions/__schema2"
+                                                            }
+                                                        },
+                                                        "inheritedValue": {
+                                                            "default": {},
+                                                            "type": "object",
+                                                            "additionalProperties": {
+                                                                "$ref": "#/definitions/__schema2"
+                                                            }
+                                                        },
+                                                        "effectivePatch": {
+                                                            "default": {},
+                                                            "type": "object",
+                                                            "additionalProperties": {
+                                                                "$ref": "#/definitions/__schema2"
+                                                            }
+                                                        },
+                                                        "globalPatch": {
+                                                            "default": {},
+                                                            "type": "object",
+                                                            "additionalProperties": {
+                                                                "$ref": "#/definitions/__schema2"
+                                                            }
+                                                        },
+                                                        "projectPatch": {
+                                                            "default": {},
+                                                            "type": "object",
+                                                            "additionalProperties": {
+                                                                "$ref": "#/definitions/__schema2"
+                                                            }
+                                                        },
+                                                        "issues": {
+                                                            "default": [],
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "path": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "severity": {
+                                                                        "default": "error",
+                                                                        "type": "string",
+                                                                        "enum": [
+                                                                            "error",
+                                                                            "warning"
+                                                                        ]
+                                                                    },
+                                                                    "code": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "message": {
+                                                                        "type": "string",
+                                                                        "minLength": 1
+                                                                    }
+                                                                },
+                                                                "required": [
+                                                                    "severity",
+                                                                    "message"
+                                                                ],
+                                                                "additionalProperties": false
+                                                            }
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "form",
+                                                        "value",
+                                                        "inheritedValue",
+                                                        "effectivePatch",
+                                                        "globalPatch",
+                                                        "projectPatch",
+                                                        "issues"
+                                                    ],
+                                                    "additionalProperties": false
                                                 }
                                             },
                                             "required": [
                                                 "profileKey",
                                                 "name",
-                                                "model"
+                                                "model",
+                                                "settings"
                                             ],
                                             "additionalProperties": false
                                         }
@@ -2225,6 +2492,38 @@ defineRouteMeta({
                                         "type": "object",
                                         "additionalProperties": {
                                             "$ref": "#/definitions/__schema1"
+                                        }
+                                    }
+                                ]
+                            },
+                            "__schema2": {
+                                "anyOf": [
+                                    {
+                                        "type": "string"
+                                    },
+                                    {
+                                        "type": "number"
+                                    },
+                                    {
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "enum": [
+                                            null
+                                        ]
+                                    },
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "$ref": "#/definitions/__schema2"
+                                        }
+                                    },
+                                    {
+                                        "type": "object",
+                                        "additionalProperties": {
+                                            "$ref": "#/definitions/__schema2"
                                         }
                                     }
                                 ]
