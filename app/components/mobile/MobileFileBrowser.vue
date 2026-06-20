@@ -459,6 +459,18 @@ onBeforeUnmount(() => clearLongPressTimer());
 
 <template>
     <div class="mobile-file-browser flex h-full flex-col overflow-hidden bg-[var(--bg-panel)]">
+        <!-- 顶部工具栏 -->
+        <div class="flex shrink-0 items-center justify-between border-b border-[var(--border-color)] px-3 py-1.5">
+            <span class="text-[11px] text-[var(--text-muted)]">文件浏览</span>
+            <button
+                type="button"
+                class="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] transition-colors active:bg-[var(--bg-hover)]"
+                title="刷新文件列表"
+                @click="void refreshTree()"
+            >
+                <span class="i-lucide-refresh-cw h-3.5 w-3.5" />
+            </button>
+        </div>
         <!-- 文件列表 -->
         <div
             class="flex-1 overflow-y-auto"
