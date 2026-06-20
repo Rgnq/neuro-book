@@ -223,17 +223,26 @@ export function useStoryReader() {
         }
     }
 
-    /** 跳转到上一章（loading 中忽略点击，防止并发的竞态请求） */
-    function goPrev(): void {
-        if (!hasPrev.value || loading.value) return;
-        const prev = ticks.value[currentIndex.value - 1];
+    /** 跳转到上一章（先刷新列表再导航，loading 中忽略点击） */
+    async function goPrev(): Promise<void> {
+        if (loading.value) return;
+        await loadTickList();
+        // 用 ID 定位当前 tick（刷新后 index 可能已变）
+        const curId = mobileUi.currentTickId;
+        const idx = curId ? ticks.value.findIndex(t => t.id === curId) : currentIndex.value;
+        if (idx <= 0) return;
+        const prev = ticks.value[idx - 1];
         if (prev) void loadTick(prev.id);
     }
 
-    /** 跳转到下一章（loading 中忽略点击，防止并发的竞态请求） */
-    function goNext(): void {
-        if (!hasNext.value || loading.value) return;
-        const next = ticks.value[currentIndex.value + 1];
+    /** 跳转到下一章（先刷新列表再导航，loading 中忽略点击） */
+    async function goNext(): Promise<void> {
+        if (loading.value) return;
+        await loadTickList();
+        const curId = mobileUi.currentTickId;
+        const idx = curId ? ticks.value.findIndex(t => t.id === curId) : currentIndex.value;
+        if (idx < 0 || idx >= ticks.value.length - 1) return;
+        const next = ticks.value[idx + 1];
         if (next) void loadTick(next.id);
     }
 

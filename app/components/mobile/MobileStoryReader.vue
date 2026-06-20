@@ -29,6 +29,16 @@ watchEffect(async () => {
     }
 });
 
+/** 手动刷新 tick 列表 */
+async function handleRefreshTicks(): Promise<void> {
+    await story.loadTickList();
+    // 如果之前无选中（首次加载），跳到最后一章
+    if (story.totalTicks > 0 && story.currentIndex < 0) {
+        const last = story.ticks[story.totalTicks - 1];
+        if (last) void story.loadTick(last.id);
+    }
+}
+
 /** 从侧栏选择 tick */
 function handleSelectTick(tickId: string): void {
     void story.loadTick(tickId);
@@ -40,14 +50,24 @@ function handleSelectTick(tickId: string): void {
     <div class="flex h-full flex-col bg-[var(--bg-main)]">
         <!-- 顶部导航栏 -->
         <div class="flex shrink-0 items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-panel)] px-3 py-2">
-            <!-- 左侧：目录按钮 -->
-            <button
-                type="button"
-                class="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors active:bg-[var(--bg-hover)]"
-                @click="mobileUi.toggleTimeline()"
-            >
-                <span class="i-lucide-list h-4 w-4" />
-            </button>
+            <!-- 左侧：目录按钮 + 刷新 -->
+            <div class="flex items-center gap-1">
+                <button
+                    type="button"
+                    class="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors active:bg-[var(--bg-hover)]"
+                    @click="mobileUi.toggleTimeline()"
+                >
+                    <span class="i-lucide-list h-4 w-4" />
+                </button>
+                <button
+                    type="button"
+                    class="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-secondary)] transition-colors active:bg-[var(--bg-hover)]"
+                    title="刷新章节列表"
+                    @click="void handleRefreshTicks()"
+                >
+                    <span class="i-lucide-refresh-cw h-3.5 w-3.5" />
+                </button>
+            </div>
 
             <!-- 中间：进度 -->
             <span
